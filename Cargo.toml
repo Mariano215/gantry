@@ -1,0 +1,21 @@
+[package]
+name = "gantry"
+version = "0.1.0"
+edition = "2021"
+description = "LLM-agnostic control plane for agentic engineering. Slice 01: evidence ledger."
+license = "Apache-2.0"
+
+[dependencies]
+# serde/serde_json: event envelope serialisation. No network or process capability.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# serde_jcs: RFC 8785 canonical JSON, required by EVENT-SCHEMA.md constraint 2.
+serde_jcs = "0.1"
+# sha2: leaf and node hashing (RFC 6962 construction).
+sha2 = "0.10"
+# ed25519-dalek: signed tree heads and actor attestations.
+ed25519-dalek = "2"
+# getrandom: OS entropy for ledger key generation. Syscall only, no network.
+getrandom = "0.2"
+# hex: hash and key encoding in the envelope's sha256:... fields.
+hex = "0.4"

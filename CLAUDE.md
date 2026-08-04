@@ -47,6 +47,10 @@ work item, and `gantry scan` on this repo is expected to report it.
 - **Post-hoc review implies rollback.** Any capability whose rung and effect
   resolve to a `post` gate declares a rollback handle, or the policy refuses to
   load. — `[UNENFORCED]` `ci/policy-rollback`
+- **An attestation is verified or declared unverified, never assumed.** The
+  ledger verifier checks actor attestations against a registered key once a
+  key registry exists; until then it counts them and says so in every report.
+  See `docs/proof/01.md` section 6. — `[UNENFORCED]` `ci/attestation-verify`
 
 ## Code standards
 
