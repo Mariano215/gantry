@@ -184,6 +184,135 @@ impl GatewayRun {
         })?;
         Ok(())
     }
+
+    /// The chokepoint. Issues one chat completion and appends the call to the
+    /// ledger whether it succeeded or not. The key never leaves this frame.
+    pub fn call(&mut self, provider: &Provider, messages: &[ChatMessage]) -> Result<CallResult, Fault> {
+        let key = match &provider.key_env {
+            Some(var) => match std::env::var(var) {
+                Ok(v) if !v.is_empty() => Some(v),
+                _ => {
+                    return Err(Fault::new(
+                        format!("provider {} needs a key in ${var}, which is unset or empty", provider.name),
+                        format!("export {var} before running, or drop key_env from the provider entry"),
+                    ))
+                }
+            },
+            None => None,
+        };
+        let prompt_hash = crate::event::subject_hash(&json!(messages))?;
+        let url = format!("{}/chat/completions", provider.base_url);
+        let body = json!({ "model": provider.model, "messages": messages });
+        let started = std::time::Instant::now();
+        let outcome = http_post_json(&url, key.as_deref(), &body);
+        let latency_ms = started.elapsed().as_millis() as u64;
+
+        match outcome {
+            Ok(resp) => {
+                let content = resp["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string();
+                let prompt_tokens = resp["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
+                let completion_tokens = resp["usage"]["completion_tokens"].as_u64().unwrap_or(0);
+                // Token counts are far below 2^52, so the f64 conversion is exact.
+                #[allow(clippy::cast_precision_loss)]
+                let cost_usd = (prompt_tokens as f64 * provider.cost_in_per_mtok
+                    + completion_tokens as f64 * provider.cost_out_per_mtok)
+                    / 1_000_000.0;
+                self.cost_total_usd += cost_usd;
+                self.append_event(
+                    "model.call",
+                    json!({
+                        "provider": provider.name,
+                        "model": provider.model,
+                        "base_url": provider.base_url,
+                        "key_env": provider.key_env,
+                        "declared_inputs": [{"name": "messages", "arrived": true}],
+                        "prompt_hash": prompt_hash,
+                        "window": {"budget": provider.window_budget, "actual": prompt_tokens + completion_tokens},
+                        "tokens": {"prompt": prompt_tokens, "completion": completion_tokens},
+                        "cost_usd": cost_usd,
+                        "latency_ms": latency_ms,
+                        "outcome": "ok",
+                        "error": null,
+                    }),
+                )?;
+                Ok(CallResult { content, prompt_tokens, completion_tokens, latency_ms })
+            }
+            Err(fault) => {
+                self.append_event(
+                    "model.call",
+                    json!({
+                        "provider": provider.name,
+                        "model": provider.model,
+                        "base_url": provider.base_url,
+                        "key_env": provider.key_env,
+                        "declared_inputs": [{"name": "messages", "arrived": true}],
+                        "prompt_hash": prompt_hash,
+                        "window": {"budget": provider.window_budget, "actual": null},
+                        "tokens": null,
+                        "cost_usd": 0.0,
+                        "latency_ms": latency_ms,
+                        "outcome": "error",
+                        "error": {"cause": fault.cause, "fix": fault.fix.clone()},
+                    }),
+                )?;
+                Err(Fault::new(
+                    format!("model call to {} failed and is on the ledger", provider.name),
+                    fault.fix,
+                ))
+            }
+        }
+    }
+}
+
+/// One turn in a chat completion request.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+pub fn msg(role: &str, content: &str) -> ChatMessage {
+    ChatMessage { role: role.to_string(), content: content.to_string() }
+}
+
+/// What a successful call hands back to the caller, after the ledger entry
+/// is already written.
+#[derive(Debug, Clone)]
+pub struct CallResult {
+    pub content: String,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub latency_ms: u64,
+}
+
+fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, Fault> {
+    let mut req = ureq::post(url).timeout(std::time::Duration::from_secs(180));
+    if let Some(k) = key {
+        req = req.set("Authorization", &format!("Bearer {k}"));
+    }
+    match req.send_json(body.clone()) {
+        Ok(resp) => resp.into_json::<Value>().map_err(|e| {
+            Fault::new(
+                format!("provider returned a non-JSON body: {e}"),
+                "check base_url points at an OpenAI-compatible /v1 endpoint",
+            )
+        }),
+        Err(ureq::Error::Status(code, resp)) => {
+            let text = resp.into_string().unwrap_or_default();
+            let text = text.chars().take(300).collect::<String>();
+            Err(Fault::new(
+                format!("provider returned HTTP {code}: {text}"),
+                "check the model name, the key, and the provider status page",
+            ))
+        }
+        Err(ureq::Error::Transport(t)) => Err(Fault::new(
+            format!("cannot reach {url}: {t}"),
+            "check the base_url, the network route, and that the endpoint is up",
+        )),
+    }
 }
 
 #[cfg(test)]
