@@ -1,0 +1,31 @@
+{
+  "$comment": "Primitive 12 — declared authority, tracked in version control. Gantry diffs this against what is actually loaded and reports drift. Do not move these values into an untracked local settings file; that is the exact failure the rubric's worked example documents.",
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "ask": [
+      "Write(**)",
+      "Edit(**)",
+      "Bash(git commit:*)",
+      "Bash(docker:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/id_rsa*)",
+      "Read(./secrets/**)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)"
+    ]
+  }
+}

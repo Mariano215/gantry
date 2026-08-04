@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#0d0e12;color:#f0f2f8;font-family:Manrope,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:#2b7fe8;text-decoration:none}
+a:hover{color:#f0f2f8}
+::selection{background:rgba(43,127,232,.3)}
+</style>
+</helmet>
+
+<div style="max-width:1180px;margin:0 auto;padding:clamp(3rem,7vw,6rem) clamp(1.25rem,5vw,3.5rem) 8rem">
+
+<header style="border-bottom:1px solid #1e2235;padding-bottom:3.5rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#8e95b3;text-transform:uppercase">Concept document · draft 02 · internal</div>
+<h1 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:clamp(2.4rem,5.6vw,4.2rem);line-height:1.02;letter-spacing:-.035em;margin:1.6rem 0 0;max-width:26ch;text-wrap:pretty">A harness that scores itself.</h1>
+<p style="font-family:Manrope,sans-serif;font-size:clamp(1.05rem,1.6vw,1.3rem);line-height:1.55;color:#a3a9c4;margin:1.6rem 0 0;max-width:60ch;text-wrap:pretty">The twelve-primitive rubric tells you which layer of your harness ran out of road. This is the thing that ships that layer already built — every primitive at anchor 4 or better on the day you run <span style="font-family:'JetBrains Mono',monospace;font-size:.86em;color:#2b7fe8">docker compose up</span>, with the evidence to prove it.</p>
+<div style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:2.5rem;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">
+<span>Working name <span style="color:#f0f2f8">{{ platformName }}</span></span><span style="color:#1e2235">·</span>
+<span>Licence <span style="color:#f0f2f8">Apache 2.0</span></span><span style="color:#1e2235">·</span>
+<span>Audience <span style="color:#f0f2f8">OSS first</span></span><span style="color:#1e2235">·</span>
+<span>Author <span style="color:#f0f2f8">Mattei Systems</span></span>
+</div>
+</header>
+
+<section style="padding-top:5rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">00 — What I am working from</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 0;max-width:32ch">Assumptions, stated so you can correct them.</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 3rem;margin-top:2.5rem">
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Source of truth</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.7rem 0 0">The twelve-primitive rubric and the Böckeler integration document, verbatim. The rubric supplies the coverage model; the paper supplies the guide/sensor axis. Nothing here invents a thirteenth primitive.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">The inversion</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.7rem 0 0">The rubric is a measuring instrument pointed at someone else's system. The platform is the same rubric pointed inward and satisfied by construction. That inversion is the whole product idea.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Not an agent framework</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.7rem 0 0">It does not compete with LangGraph, Temporal or Claude Code. It sits underneath them. Any of them can be the agent; this is the harness they run inside.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">What the screenshots are not</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.7rem 0 0">A skill graph is a catalogue of what agents could do. It has no policy engine, no evidence, no sandbox. Beautiful map, no control plane. The graph here plots live conformance, not inventory.</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">01 — Positioning</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 0;max-width:34ch">Everyone is shipping the agent. Nobody is shipping the harness.</h2>
+<div style="display:grid;grid-template-columns:1.15fr .85fr;gap:4rem;margin-top:2.5rem;align-items:start">
+<div>
+<p style="font-size:1.05rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;max-width:62ch;text-wrap:pretty">Agent = model + harness. The market has spent two years on the model side and on the demo side. The harness — the part that decides whether an action is permitted, records that it happened, and can prove it to someone who was not in the room — is still assembled by hand at every company that needs it, and assembled badly.</p>
+<p style="font-size:1.05rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;max-width:62ch;text-wrap:pretty">The rubric's own arithmetic explains why this is a product and not a blog post. The overall level is the <span style="color:#f0f2f8">minimum</span> across primitives, not the average. Nine strong layers and one absent trust layer is a level 1 system. That is a devastating rule for anyone assembling a harness piecemeal, because the pieces nobody builds are always 10, 11 and 12 — verification, observability, governance. They are unglamorous, they gate nothing anyone wants gated, and they are exactly what turns into an audit finding.</p>
+<p style="font-size:1.05rem;line-height:1.7;color:#a3a9c4;margin:0;max-width:62ch;text-wrap:pretty">So the offer is narrow and hard to argue with: install one thing, and your floor stops being your weakest layer.</p>
+</div>
+<div style="border:1px solid #1e2235;background:#131520;padding:2rem;border-radius:4px">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">The one-line pitch</div>
+<p style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;font-size:1.35rem;line-height:1.35;letter-spacing:-.02em;color:#f0f2f8;margin:1rem 0 1.8rem;text-wrap:pretty">The open reference harness for agentic engineering. Security and evidence are the substrate, not a module.</p>
+<div style="display:flex;flex-direction:column;gap:.85rem">
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">Every model call and tool call passes one chokepoint, so observability is not a feature anyone can forget to turn on.</span></div>
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">Authority is declared in version control and enforced at the boundary, not written in a policy nobody checks.</span></div>
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">The installation scores itself against the rubric continuously, and links every score to evidence an auditor can read without an engineer present.</span></div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">02 — The map</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:34ch">Twelve primitives, nine services.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0;max-width:66ch;text-wrap:pretty">The chain ascends because each primitive exists where the one before it hit a wall. It is not decoration: in the product this same graph reads live conformance off the ledger, and clicking a node opens the evidence behind its score. Pick a node.</p>
+
+<div style="border:1px solid #1e2235;background:#131520;border-radius:4px;margin-top:2.5rem;padding:1.5rem 1rem .5rem;position:relative;overflow:hidden">
+<div style="position:absolute;width:520px;height:520px;border-radius:50%;background:rgba(43,127,232,.07);filter:blur(90px);right:-120px;top:-200px;pointer-events:none"></div>
+<svg viewBox="0 0 900 246" onClick="{{ onPick }}" style="width:100%;height:auto;display:block;position:relative">
+<rect x="664" y="34" width="236" height="200" rx="3" fill="{{ trustFill }}" stroke="rgba(43,127,232,.18)"></rect>
+<line x1="232" y1="34" x2="232" y2="234" stroke="#1e2235"></line>
+<line x1="376" y1="34" x2="376" y2="234" stroke="#1e2235"></line>
+<line x1="520" y1="34" x2="520" y2="234" stroke="#1e2235"></line>
+<line x1="664" y1="34" x2="664" y2="234" stroke="#1e2235"></line>
+<g font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="2.4" fill="#8e95b3" text-anchor="middle">
+<text x="142" y="20">KNOWING</text>
+<text x="304" y="20">ACTING</text>
+<text x="448" y="20">CONTINUITY</text>
+<text x="592" y="20">SCALING</text>
+<text x="782" y="20" fill="#2b7fe8">TRUST</text>
+</g>
+<path d="M52 195 L124 171 L196 191 L268 159 L340 177 L412 145 L484 163 L556 131 L628 149 L700 117 L772 135 L844 103" fill="none" stroke="#1e2235" stroke-width="1.5"></path>
+<circle cx="{{ ringX }}" cy="{{ ringY }}" r="26" fill="none" stroke="#2b7fe8" stroke-width="1.5" opacity=".85"></circle>
+<g font-family="JetBrains Mono, monospace" text-anchor="middle">
+<g data-p="0"><circle cx="52" cy="195" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="52" y="199" font-size="11" fill="#f0f2f8">01</text><text x="52" y="227" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">INSTRUCTION</text></g>
+<g data-p="1"><circle cx="124" cy="171" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="124" y="175" font-size="11" fill="#f0f2f8">02</text><text x="124" y="203" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">CONTEXT</text><text x="124" y="216" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">DELIVERY</text></g>
+<g data-p="2"><circle cx="196" cy="191" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="196" y="195" font-size="11" fill="#f0f2f8">03</text><text x="196" y="223" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">CONTEXT</text><text x="196" y="236" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">MGMT</text></g>
+<g data-p="3"><circle cx="268" cy="159" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="268" y="163" font-size="11" fill="#f0f2f8">04</text><text x="268" y="191" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">TOOL</text><text x="268" y="204" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">INTERFACE</text></g>
+<g data-p="4"><circle cx="340" cy="177" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="340" y="181" font-size="11" fill="#f0f2f8">05</text><text x="340" y="209" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">EXECUTION</text><text x="340" y="222" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">ENV</text></g>
+<g data-p="5"><circle cx="412" cy="145" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="412" y="149" font-size="11" fill="#f0f2f8">06</text><text x="412" y="177" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">DURABLE</text><text x="412" y="190" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">STATE</text></g>
+<g data-p="6"><circle cx="484" cy="163" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="484" y="167" font-size="11" fill="#f0f2f8">07</text><text x="484" y="195" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">ORCHES-</text><text x="484" y="208" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">TRATION</text></g>
+<g data-p="7"><circle cx="556" cy="131" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="556" y="135" font-size="11" fill="#f0f2f8">08</text><text x="556" y="163" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">SUB-AGENTS</text></g>
+<g data-p="8"><circle cx="628" cy="149" r="16" fill="#131520" stroke="#1e2235" stroke-width="1.5"></circle><text x="628" y="153" font-size="11" fill="#f0f2f8">09</text><text x="628" y="181" font-size="10.5" letter-spacing="0.5" fill="#8e95b3">SKILLS</text></g>
+<g data-p="9"><circle cx="700" cy="117" r="19" fill="#131520" stroke="#2b7fe8" stroke-width="1.5"></circle><text x="700" y="121" font-size="12" fill="#f0f2f8">10</text><text x="700" y="152" font-size="10.5" letter-spacing="0.5" fill="#a3a9c4">VERIFICATION</text></g>
+<g data-p="10"><circle cx="772" cy="135" r="19" fill="#131520" stroke="#2b7fe8" stroke-width="1.5"></circle><text x="772" y="139" font-size="12" fill="#f0f2f8">11</text><text x="772" y="170" font-size="10.5" letter-spacing="0.5" fill="#a3a9c4">OBSERV-</text><text x="772" y="183" font-size="10.5" letter-spacing="0.5" fill="#a3a9c4">ABILITY</text></g>
+<g data-p="11"><circle cx="844" cy="103" r="19" fill="#131520" stroke="#2b7fe8" stroke-width="1.5"></circle><text x="844" y="107" font-size="12" fill="#f0f2f8">12</text><text x="844" y="138" font-size="10.5" letter-spacing="0.5" fill="#a3a9c4">GOVERNANCE</text></g>
+</g>
+</svg>
+</div>
+
+<div style="display:grid;grid-template-columns:.9fr 1.1fr;gap:0;margin-top:1.5rem;border:1px solid #1e2235;border-radius:4px;overflow:hidden">
+<div style="padding:2rem;border-right:1px solid #1e2235;background:#131520">
+<div style="display:flex;align-items:baseline;gap:.8rem">
+<span style="font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:500;color:#2b7fe8;letter-spacing:-.02em">{{ selNum }}</span>
+<h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.5rem;letter-spacing:-.025em;margin:0;color:#f0f2f8">{{ selName }}</h3>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.4rem">
+<span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#8e95b3;border:1px solid #1e2235;padding:.35rem .6rem;border-radius:3px">{{ selGroup }}</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#2b7fe8;border:1px solid rgba(43,127,232,.3);padding:.35rem .6rem;border-radius:3px">{{ selCarried }}</span>
+</div>
+<p style="font-size:.92rem;line-height:1.65;color:#8e95b3;margin:1.4rem 0 0">{{ selWall }}</p>
+</div>
+<div style="padding:2rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">{{ detailLabel }}</div>
+<p style="font-size:1rem;line-height:1.7;color:#f0f2f8;margin:1rem 0 0">{{ selDetail }}</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">03 — The mechanism</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:34ch">The trust budget, and strictness as a choice.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0;max-width:66ch;text-wrap:pretty">You asked to explore the human-in-the-loop model. There are three obvious shapes, each incomplete on its own. The proposal is to collapse them into one mechanism rather than ship three features.</p>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0 2.5rem;margin-top:2.5rem">
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Option A · policy gates</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.8rem 0 0">Classes of action require approval, declared as code. Precise and auditable. Static — it cannot express an agent that has earned latitude, so teams route around it.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Option B · autonomy ladder</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.8rem 0 0">Per capability: human-led, human-assisted, fully autonomous. Legible to non-engineers, which is why the screenshots lead with it. Theatre unless promotion is tied to real sensor history.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Option C · review and rollback</div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:.8rem 0 0">Let it run, review after, revert. Fastest loop and correct for reversible work. Worthless the moment an action leaves the building — a payment, a filing, a production deploy.</p>
+</div>
+</div>
+
+<div style="border:1px solid rgba(43,127,232,.25);background:#131520;border-radius:4px;padding:2.5rem;margin-top:2.5rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">Proposal</div>
+<p style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;font-size:1.5rem;line-height:1.35;letter-spacing:-.025em;color:#f0f2f8;margin:1rem 0 1.6rem;max-width:44ch;text-wrap:pretty">Every capability holds a rung. The rung decides where the human stands. Sensors decide the rung.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2rem">
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Rung sets the gate</div>
+<p style="font-size:.92rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Human-led means the gate is pre-action and blocking. Assisted means pre-action for the irreversible subset only. Autonomous means post-action review with rollback. One field, three behaviours — A and C stop being separate systems.</p>
+</div>
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Promotion is earned</div>
+<p style="font-size:.92rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">A capability rises a rung only after N runs at the current rung with zero sensor failures and zero human overrides. Promotion is a signed ledger event with a named approver. Demotion is automatic on failure and needs no meeting.</p>
+</div>
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Why this is the soul of it</div>
+<p style="font-size:.92rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">It is anchor 5 made operational. A failure does not just get fixed, it moves a rung and adds a sensor. The harness gets tighter where it was wrong and looser where it has been right, and both movements leave a record.</p>
+</div>
+</div>
+</div>
+
+<h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.4rem,2.4vw,1.9rem);line-height:1.15;letter-spacing:-.028em;margin:4rem 0 .8rem;max-width:34ch;color:#f0f2f8">Profiles, so strictness is a choice that cannot lie.</h3>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2rem;max-width:70ch;text-wrap:pretty">Two things need to be selectable: how hard the sandbox is, and where the human stands. Making each a separate flag produces a matrix nobody understands. Instead one profile sets isolation, gate placement, anchoring and identity together, and the profile is a single argument at start-up. The rung defaults it hands you stay overridable per capability.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:70ch;text-wrap:pretty">The design constraint that makes this safe: the conformance scorer reads what is <span style="color:#f0f2f8">actually running</span>, never the profile name. Choosing the laptop profile visibly lowers primitive 05 and caps the overall level. Nothing is weakened silently, and a screenshot of a score always carries the profile that produced it.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:0 2.5rem">
+<div style="border-top:2px solid #2b7fe8;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.2rem;letter-spacing:-.02em;color:#f0f2f8">laptop</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Default</div></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ gantry up</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">One container, SQLite, local ledger file, local accounts. OCI isolation with a seccomp profile and an empty egress allowlist — real containment, no nested virtualisation, works on any machine. Rungs default to autonomous with post-hoc review, because on a laptop the work is reversible and the loop should be fast.</p>
+<p style="font-size:.9rem;line-height:1.55;color:#8e95b3;margin:.9rem 0 0">Honest ceiling — primitive 05 scores 3, so the overall level caps at 3. Stated on the dashboard, not buried.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.2rem;letter-spacing:-.02em;color:#f0f2f8">team</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Shared</div></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ gantry up --profile team</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">Kernel-level sandboxing, Postgres, OIDC approvers, tree heads anchored daily to object storage. Rungs default to assisted: pre-action gates on the irreversible subset only. The point where approvals start carrying a real identity from the directory.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.2rem;letter-spacing:-.02em;color:#f0f2f8">regulated</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Air-gapped</div></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ gantry up --profile regulated</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">MicroVM isolation, signing keys in an HSM or TPM, OIDC required with no local-account fallback, external timestamping, and no promotion above assisted without a named approver. Refuses to start when any of those are unavailable rather than degrading quietly.</p>
+<p style="font-size:.9rem;line-height:1.55;color:#8e95b3;margin:.9rem 0 0">Needs nested virtualisation. That requirement is the price of a 4 on primitive 05, and should be sold as such rather than apologised for.</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">04 — The audit layer</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 0;max-width:34ch">Do not build this on a blockchain.</h2>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:4rem;margin-top:2.2rem;align-items:start">
+<div>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;text-wrap:pretty">You asked to be argued out of it, so: an auditor wants four things from a record. Integrity — nothing was altered. Attribution — who or what did it, under whose authority. Time — when, provably. Completeness — nothing was omitted.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;text-wrap:pretty">A hash-chained log with per-entry signatures from a key held in a TPM or HSM delivers integrity, attribution and time. Completeness is a process control — it comes from the architecture forcing every call through one chokepoint, and no ledger design can supply it.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;text-wrap:pretty">What a blockchain adds beyond that is distributed consensus, which solves exactly one problem: mutual distrust between parties who cannot agree on who operates the log. In a single-tenant install the operator <span style="color:#f0f2f8">is</span> the client. There is no counterparty. Consensus buys nothing and charges throughput, key ceremony, operational surface, and — fatally for your air-gap requirement — peers.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0;text-wrap:pretty">There is also a credibility cost. Say "blockchain" to a pharma QA lead or a bank's model risk group and you are now the tenth vendor to say it. Say "transparency log, the same construction that secures certificate issuance on the public web" and you are speaking a language their PKI team already trusts.</p>
+</div>
+<div style="border:1px solid #1e2235;background:#131520;border-radius:4px;padding:2rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">Build this instead</div>
+<h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.35rem;letter-spacing:-.025em;margin:.9rem 0 1.4rem;color:#f0f2f8">An append-only Merkle transparency log</h3>
+<div style="display:flex;flex-direction:column;gap:.9rem">
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">RFC 6962 construction. Signed tree heads, inclusion proofs, consistency proofs.</span></div>
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">An auditor can verify a single event without reading, or being trusted with, the rest of the log.</span></div>
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">Verification is an offline binary. No network, no node, no chain to sync.</span></div>
+<div style="display:flex;gap:.7rem;align-items:baseline"><span style="color:#2b7fe8;font-size:.6rem;line-height:1.9">◆</span><span style="font-size:.9rem;line-height:1.55;color:#a3a9c4">Anchoring is a pluggable one-liner: WORM object store, an RFC 3161 timestamp authority, a client's internal notary — or a public chain, if a client insists on the word.</span></div>
+</div>
+<p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:1.8rem 0 0;padding-top:1.4rem;border-top:1px solid #1e2235">Net effect — you keep blockchain as a checkbox at the edge of the system and off the critical path. The architecture never depends on it, and it never has to be explained.</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">05 — Stack</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:36ch">The core language and the UI language are two different decisions.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0;max-width:66ch;text-wrap:pretty">Treating them as one is how Rust-versus-Blazor becomes a false choice. The control plane sits in the hot path of every model call, holds keys, and supervises sandboxes. The UI reads an API. Judge them separately.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 2.5rem;margin-top:2.5rem">
+<div style="border-top:2px solid #2b7fe8;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.25rem;letter-spacing:-.02em;color:#f0f2f8">Rust</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Recommended · core</div></div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:1rem 0 0">A single static binary, a container measured in megabytes, no runtime to install in an air-gapped environment. Memory safety is not a preference in a component whose job is to gate privileged actions — it is the difference between a security product and a security incident. Mature crypto and TLS, and real libraries for namespaces, seccomp and eBPF, which is where primitive 05 actually lives.</p>
+<p style="font-size:.94rem;line-height:1.65;color:#8e95b3;margin:1rem 0 0"><span style="color:#f0f2f8">Cost</span> — a smaller contributor pool for an OSS-first project, and a slower first quarter. Both are real. Neither is fatal if the plugin surface is language-agnostic, which it is.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.25rem;letter-spacing:-.02em;color:#f0f2f8">Go</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">The honest alternative</div></div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:1rem 0 0">Most of Rust's deployment story, a far larger contributor pool, and — the strongest argument — the entire cloud-native ecosystem you would otherwise reimplement is already Go-native. Policy engines, container runtimes, telemetry, transparency logs. You would be assembling rather than authoring.</p>
+<p style="font-size:.94rem;line-height:1.65;color:#8e95b3;margin:1rem 0 0"><span style="color:#f0f2f8">Cost</span> — a garbage collector in the hot path, and a weaker claim when a CISO asks why they should trust the gatekeeper. Choose this if velocity matters more than the assurance signal.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.25rem;letter-spacing:-.02em;color:#f0f2f8">C# / Blazor</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not the core</div></div>
+<p style="font-size:.94rem;line-height:1.65;color:#a3a9c4;margin:1rem 0 0">A genuinely good language, and in a .NET bank or pharma it is a sales advantage — the client's own team can read, audit and extend it. That advantage is real and worth capturing. But it belongs in a first-class C# SDK, not in the core.</p>
+<p style="font-size:.94rem;line-height:1.65;color:#8e95b3;margin:1rem 0 0"><span style="color:#f0f2f8">Cost as core</span> — the whole .NET runtime enters the container, the agentic and cloud-native ecosystem is somewhere else entirely, and an OSS-first project becomes an island. Blazor Server also wants a persistent socket, which is awkward for an air-gapped appliance UI.</p>
+</div>
+</div>
+<div style="border:1px solid #1e2235;background:#131520;border-radius:4px;padding:2rem;margin-top:2.5rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Verdict</div>
+<p style="font-size:1.02rem;line-height:1.7;color:#f0f2f8;margin:.9rem 0 0;max-width:78ch;text-wrap:pretty">Rust control plane shipped as one binary. The UI is a static web app that binary serves — no separate process, no node in the container. Agnosticism lives in the SDKs, and there you go wide: Python and TypeScript first because that is where agent authors are, then C# and Go. A .NET shop that wants a Blazor console builds it against the same API you did, which is the correct proof that the API is the product.</p>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">06 — Agnosticism</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:32ch">Six axes, and where each one is actually held.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:66ch;text-wrap:pretty">You marked all six non-negotiable. Agnosticism is cheap to claim and expensive to keep, so each axis needs a named seam and a conformance test that runs in CI. Otherwise it decays into "works with Anthropic, compiles with the others."</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:0 3rem">
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Model provider</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">One gateway, provider adapters behind it. Anthropic, OpenAI, Bedrock, Azure, vLLM, Ollama. The seam is a normalised call event, so a trace looks identical whichever model produced it. Conformance test: the same run, three providers, three byte-comparable ledger shapes.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Air-gapped operation</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">The hardest constraint, and the one that disciplines everything else. No phone-home, no hosted control plane, no licence check, no CDN font. Verification is an offline binary. Test: the full suite runs with the network namespace empty.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Cloud or bare metal</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Compose for a laptop, a Helm chart for a cluster, the same binary in both. Storage and secrets sit behind interfaces with a filesystem-and-SQLite default, so nothing requires a managed service to start.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Target tech stack</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Sensors are declared, not built in: a sensor is a container plus a contract that emits a verdict and a fix-naming message. Whether it is pytest, cargo clippy, ArchUnit or a bespoke linter is the workload's business, not the platform's.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Agent framework</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Two integration depths. Shallow: point any harness at the gateway and the tool broker and you inherit 04, 05, 11 and 12 for free. Deep: use the orchestrator and state store and you get 06 through 10. Claude Code, Copilot, LangGraph or a shell script all work at the shallow depth on day one.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Identity provider</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">OIDC for human approvers, so approvals carry a real identity from the client's directory. Local accounts exist for the air-gapped and single-developer cases. An approval without a resolvable identity is not an approval, and the ledger records which kind it was.</p></div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">07 — Plan</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:34ch">Nine slices. Each one ends in a proof, not a demo.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 1rem;max-width:70ch;text-wrap:pretty">Design, code, test, proof, next — as you asked. Two rules shape the order. Evidence cannot be retrofitted, so the ledger is slice one. And every slice must make the following slice safer to build, which is why the sandbox lands before the orchestrator.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:70ch;text-wrap:pretty">A proof is adversarial and written down. Not "here is the feature working" but "here is the attack, and here is the record of it failing." Each slice commits a <span style="font-family:'JetBrains Mono',monospace;font-size:.86em;color:#2b7fe8">docs/proof/NN.md</span> with the evidence and the conformance delta.</p>
+<div style="border:1px solid rgba(43,127,232,.25);background:#131520;border-radius:4px;padding:2rem;margin:0 0 2.5rem"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">The proving workload</div><p style="font-size:1.02rem;line-height:1.7;color:#f0f2f8;margin:.9rem 0 0;max-width:78ch;text-wrap:pretty">A sandboxed repository security audit. A small crew of agents checks out a repo, runs with no network route and no write access, and emits a signed findings report where every finding carries an inclusion proof back to the calls that produced it.</p><p style="font-size:.93rem;line-height:1.65;color:#a3a9c4;margin:1rem 0 0;max-width:78ch;text-wrap:pretty">It was chosen because it exercises the layers nobody builds — 04, 05, 10, 11 and 12 all under real load — rather than the ones that demo well. The agents read untrusted third-party code, which is the honest test of the sandbox. Findings must be reproducible, which is the honest test of verification. And the output is a deliverable someone would actually pay for, so the proof and the marketing are the same artifact.</p></div>
+<div style="border-top:1px solid #1e2235">
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">00</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Schemas before code</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">The event schema and the policy schema. Everything downstream is a consumer of these two, and changing them later is the one migration you cannot afford.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">A hand-written trace of one real agent run, expressed entirely in the schema, that a stranger can read and reconstruct without the author present.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">01</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Evidence ledger</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Append-only Merkle log, signed tree heads, inclusion and consistency proofs, offline verifier. Primitive 11 exists before anything can fail to be recorded.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">Edit one byte of one historical record. The verifier names the entry and the divergence point. Then verify a single event's inclusion offline, given nothing but the event and a signed head.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">02</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Model gateway</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Provider adapters, normalised call events, window accounting, prompt and instruction versions pinned per call. The chokepoint that makes 02, 03 and 11 structural.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">One agent run against a frontier API, a cloud-hosted model and a local model on a machine with no route to the internet. Three ledgers, one shape. Diff them in the doc.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">03</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Tool broker and policy engine</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">MCP as the wire protocol. A schema registry that refuses loose schemas, output tainting, and authority-as-code evaluated on every call.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">A genuinely destructive command is denied. The ledger names the rule that fired, the version of the policy, and the identity the agent was acting as. Then try to publish a tool declared as "run any shell command" and watch the registry reject it.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">04</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Sandbox, credential broker, egress control</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Per-run isolation, an allowlist enforced at the network namespace, and secrets the model never sees — it holds a handle, the broker injects the real value at the boundary.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">Ship a deliberately hostile tool that reads every environment variable and posts them to an outside host, plus a prompt-injected document instructing the agent to help it. Both fail. Both are in the ledger. This is the launch demo.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">05</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Sensor bus</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Register a sensor with a lifecycle placement — pre-integration, post-integration, continuous drift. Computational and inferential. Verdict messages are schema'd to name the fix, because an agent is the reader.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">A failing sensor blocks the result. The agent reads the message, corrects on rerun, and passes — with no human in the loop and both attempts recorded. Then break the sensor itself and confirm a sensor that cannot fail is reported as broken, not as clean.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">06</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Orchestrator and trust budget</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Durable workflow, lifecycle hooks, retries, blocking gates, OIDC approvals, and rungs with sensor-driven promotion and automatic demotion.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">A capability earns its way from assisted to autonomous on real sensor history, promoted by a named approver, and is demoted automatically by the next failure. Read the whole arc back out of the ledger as a story.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">07</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Durable state and corpus graph</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Plans, checkpoints and memory outside the model's attention. A persisted graph over the codebase and documents that the agent traverses instead of re-reading, with staleness expiry.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">Kill the container mid-run. Resume. Nothing is lost and the ledger shows the seam. Separately: same task, graph retrieval versus flat retrieval, with the token and accuracy delta published including the cases where the graph lost.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">08</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Conformance scorer and the console</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">The rubric as a running service. Twelve live scores computed from real telemetry, N/A where the workload never exercises a layer, overall level as the minimum, every score linked to its evidence.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">Score the platform with itself and publish the result, low numbers included, in the launch README. The worked example in the rubric is the template: three layers at 4 and an overall level of 2 is a more persuasive artifact than a clean sheet, and it cannot be faked.</p></div></div>
+<div style="display:grid;grid-template-columns:60px 1fr 1.15fr;gap:2rem;padding:1.7rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:#8e95b3;padding-top:.2rem">09</div><div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1.1rem;letter-spacing:-.02em;color:#f0f2f8">Skills, sub-agents, templates</div><p style="font-size:.9rem;line-height:1.6;color:#8e95b3;margin:.5rem 0 0">Signed skill packages with a resolver, delegation with narrowed scope, and harness templates for common service topologies. Last, because these are the layers whose value depends on everything below already holding.</p></div><div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Proof</div><p style="font-size:.9rem;line-height:1.6;color:#a3a9c4;margin:.5rem 0 0">Break a skill's metadata deliberately and confirm the resolver refuses to publish it rather than silently falling back to its title. Then delete a step a skill references and confirm something fails before a run does.</p></div></div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">08 — Name</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:32ch">Four candidates. One recommendation.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:66ch;text-wrap:pretty">The test for an OSS name that catches on: one or two syllables, works as a verb in a terminal, and carries a metaphor an engineer gets without explanation.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 2.5rem">
+<div style="border-top:2px solid #2b7fe8;padding:1.6rem 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.03em;color:#f0f2f8">Gantry</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:#2b7fe8;text-transform:uppercase">Pick this</div></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ gantry up</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">The structure that holds something powerful and dangerous steady, gives engineers access to every part of it, and is deliberately left behind at ignition. That is a harness, exactly. Two syllables, verbs cleanly, and the metaphor needs no explanation. Repo <span style="font-family:'JetBrains Mono',monospace;font-size:.86em;color:#f0f2f8">Mariano215/gantry</span>, binary <span style="font-family:'JetBrains Mono',monospace;font-size:.86em;color:#f0f2f8">gantry</span>. One caveat worth checking before you commit: Gantry is also a long-running Joomla template framework, so search results will be muddy. Titling the README <span style="color:#f0f2f8">Gantry — the reference harness for agentic engineering</span> separates them quickly. No domain is needed to launch; the repo is the front door.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.03em;color:#f0f2f8">Keel</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ keel init</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">The structural spine, and laying the keel is the first act of building a ship. Shortest of the four and the calmest. Weaker on the safety and access idea, stronger on foundation.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.03em;color:#f0f2f8">Ratchet</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ ratchet score</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">Turns one way only. A direct encoding of the compounding anchor and of automatic demotion. The most conceptually precise name here, and the least warm.</p>
+</div>
+<div style="border-top:1px solid #1e2235;padding:1.6rem 0">
+<div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.5rem;letter-spacing:-.03em;color:#f0f2f8">Assay</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8e95b3;margin-top:.7rem">$ assay verify</div>
+<p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:1rem 0 0">To test a metal and certify what it actually is. Perfect for the evidence and conformance half, misleading about the runtime half. Better as the name of the scorer than the platform.</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">09 — Boundaries</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:34ch">What this is not, so the scope survives contact.</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 2.5rem;margin-top:2rem">
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not an agent framework</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">No opinion on how you write the loop. If it can call a model and a tool, it can run here.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not a chat product</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">The console is for operators and auditors. There is no assistant UI, and adding one would cost the project its identity.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not an eval platform</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Evals are one kind of sensor and plug into the bus. Building a benchmark suite is a different company.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not a skills marketplace</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">A registry with signing and resolution, yes. Curation, discovery and a hundred-and-thirty-seven-item catalogue, no. That is the thing the screenshots already are.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not a compliance product</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">It produces the evidence a regime needs. It does not claim certification, and mapping evidence to a specific regime is consulting work — which is the business model, not the repo.</p></div>
+<div style="border-top:1px solid #1e2235;padding:1.5rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Not a model</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:.7rem 0 0">Nothing here trains or serves weights. The whole thesis is that the harness is the part worth building.</p></div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">10 — Settled</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:32ch">Decisions taken, and the two still open.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:66ch;text-wrap:pretty">Recorded here so the plan has a stated basis and anyone joining later can see what was decided rather than inferring it.</p>
+<div style="display:flex;flex-direction:column;gap:0;border-top:1px solid #1e2235">
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Governance in the open repo</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">Evidence mappings ship in the repo — the control crosswalks, and which events satisfy which control. Interpretation and attestation stay as the service, because a crosswalk is unusable without someone who knows the auditor. Publishing the mappings is also what makes the project spread, and the mappings are the part that ages fastest anyway.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Sandbox floor</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">The laptop profile is the default and needs no nested virtualisation. Isolation is a real OCI sandbox with seccomp and an empty egress allowlist, not an honour system — it simply scores 3 rather than 4, and says so.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Trust budget selectability</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">Rung defaults come from the profile and are overridable per capability. What is not overridable is the record: a chosen rung, an override and a promotion are all ledger events with an author.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Scorer</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">Built in, and the scoring rules ship as data. A third party can re-run them against an exported ledger and reach the same twelve numbers without trusting the binary that produced them. Without that, a self-scoring platform is marketing.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Attribution</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">Both sources credited in the README above the architecture — the twelve-primitive decomposition, and Böckeler’s guide/sensor taxonomy, published April 2026. Borrowing openly reads as confidence.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Still open · name collision</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">Gantry needs a five-minute check against crates.io, npm and the Joomla project’s search footprint before the repo is created. Keel and Ratchet remain the fallbacks and both survive the same test more easily.</p></div>
+
+<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:2.5rem;padding:1.5rem 0"><div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:1rem;color:#f0f2f8">Still open · audit crew scope</div><p style="font-size:.93rem;line-height:1.6;color:#a3a9c4;margin:0">The proving workload needs a boundary or it becomes a security product. My proposal: secrets, dependency provenance and authorisation-boundary findings only. No SAST engine, no rule authoring, no dashboard. It exists to prove the harness, and the day it starts competing with Semgrep the project has lost its subject.</p></div>
+</div>
+</section>
+
+<section style="padding-top:6rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;color:#2b7fe8;text-transform:uppercase">11 — First client</div>
+<h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:clamp(1.7rem,3.2vw,2.5rem);line-height:1.12;letter-spacing:-.03em;margin:1.2rem 0 .8rem;max-width:36ch">Claude Code already has the sockets. Gantry plugs into them.</h2>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 1.1rem;max-width:70ch;text-wrap:pretty">This changes the shape of v0. A coding agent with a hook system, an MCP client, a permission model and an instruction file already exposes an extension point for most of the twelve. Gantry does not need to become an agent runtime to deliver the laptop profile — it needs to sit in those sockets and write to the ledger. That is weeks of work, and it means someone adopts the harness without changing tools, which is the only adoption story an OSS project of this kind gets.</p>
+<p style="font-size:1.02rem;line-height:1.7;color:#a3a9c4;margin:0 0 2.5rem;max-width:70ch;text-wrap:pretty">Verify the specifics against current documentation before building — extension surfaces move. The mapping below is the shape, not the API.</p>
+<div style="border-top:1px solid #1e2235">
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.3rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Socket</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">Carries</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:#8e95b3;text-transform:uppercase">What Gantry puts there</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">CLAUDE.md · AGENTS.md</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">01</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Generated from a version-controlled instruction pack, with the checker that fails the build when a rule it declares is violated in the diff. The file stops being hand-edited prose.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Pre-tool hook</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">04 · 07 · 12</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">The policy decision. Allow, deny, or hold for approval, evaluated against declared authority. The decision, the rule that fired and the identity in force all land in the ledger before the call proceeds.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Post-tool hook</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">10 · 11</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Sensor dispatch. Fast computational sensors run here and their verdicts return as fix-naming messages the agent reads and acts on, rather than as a wall of failing output.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">MCP servers</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">04 · 05</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Gantry registers as one server that proxies the rest, so every tool passes the schema registry and the credential broker. Existing MCP tools work unmodified, which is the whole point of not inventing a protocol.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Session start · end hooks</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">06 · 11</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Open and seal the run. Restore the plan and checkpoint on start; write the signed run summary on end, so a session has a beginning and an end an auditor can point at.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Skills · commands</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">09</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Signed skill packages installed into the directory the agent already reads, with the resolver that refuses to publish invalid metadata instead of silently falling back to a title.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0;border-bottom:1px solid #1e2235"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Subagent definitions</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">08</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Roles with narrowed tools and a per-role policy, so a delegated agent inherits less authority than its parent rather than the same.</div></div>
+<div style="display:grid;grid-template-columns:1.1fr .55fr 1.35fr;gap:2rem;padding:1.4rem 0"><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#f0f2f8">Settings · permissions</div><div style="font-family:'JetBrains Mono',monospace;font-size:.83rem;color:#2b7fe8">05 · 12</div><div style="font-size:.92rem;line-height:1.6;color:#a3a9c4">Declared in version control and diffed against what is actually loaded. This is the drift check, and it is the exact failure from the rubric's worked example: a permission mode living in an untracked local file while the tracked config claimed something else.</div></div>
+</div>
+
+<div style="border:1px solid rgba(43,127,232,.25);background:#131520;border-radius:4px;padding:2.5rem;margin-top:2.5rem">
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">The onboarding wedge</div>
+<p style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;font-size:1.45rem;line-height:1.35;letter-spacing:-.025em;color:#f0f2f8;margin:1rem 0 1.8rem;max-width:46ch;text-wrap:pretty">Nobody installs a control plane. They will run a scan on their own repo and argue with the score.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:2rem">
+<div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2b7fe8;letter-spacing:.08em">$ gantry scan</div><p style="font-size:.91rem;line-height:1.6;color:#a3a9c4;margin:.8rem 0 0">Reads what is already there — instruction files, hooks, test gates, declared permissions, MCP config, CI — and scores twelve primitives with a file path or an explicit "looked in X and Y, found nothing" behind every number. Read-only, sixty seconds, no account. This is the artifact people post.</p></div>
+<div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2b7fe8;letter-spacing:.08em">$ gantry apply</div><p style="font-size:.91rem;line-height:1.6;color:#a3a9c4;margin:.8rem 0 0">Scaffolds the missing layers as a reviewable diff, never a silent write. Hooks, instruction pack, sensor registrations, declared authority. Ranked by the rubric's own remediation order, so the first thing it offers is the thing with the largest expected gain.</p></div>
+<div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2b7fe8;letter-spacing:.08em">$ gantry up</div><p style="font-size:.91rem;line-height:1.6;color:#a3a9c4;margin:.8rem 0 0">Brings up the ledger, broker and sandbox on the laptop profile. From here the scan stops being a snapshot and becomes live telemetry — the same twelve numbers, now computed from real runs instead of from configuration.</p></div>
+<div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#2b7fe8;letter-spacing:.08em">$ gantry verify</div><p style="font-size:.91rem;line-height:1.6;color:#a3a9c4;margin:.8rem 0 0">Checks the ledger offline and re-runs the published scoring rules against it. Anyone can run this against an exported ledger they were handed, which is what keeps a self-scoring platform honest.</p></div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4rem;margin-top:3.5rem;align-items:start">
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">One thing to be honest about</div>
+<p style="font-size:1rem;line-height:1.68;color:#a3a9c4;margin:.9rem 0 0;text-wrap:pretty">A hook is an enforcement point, not a security boundary. A user who edits their own settings can remove it, so hooks alone cannot carry primitive 05 — that is what the sandbox and the egress namespace are for. What hooks <span style="color:#f0f2f8">can</span> do is make removal visible: the settings hash goes into every run's opening event, so a harness that was switched off leaves a gap in the record with a timestamp on it. Detection rather than prevention, and labelled as such in the score.</p>
+</div>
+<div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#2b7fe8;text-transform:uppercase">Build it with the thing it harnesses</div>
+<p style="font-size:1rem;line-height:1.68;color:#a3a9c4;margin:.9rem 0 0;text-wrap:pretty">Point Gantry at its own repo the week slice 01 can run at all. Every proof document then gets written from a real ledger instead of assembled by hand, and the launch score is a byproduct of construction rather than an exercise. The rubric's worked example already shows the shape of it: the CI added to catch mistakes caught its author's mistakes within minutes of existing. That is the note to launch on.</p>
+</div>
+</div>
+</section>
+
+<section style="padding-top:5rem">
+<div style="padding-top:2.5rem;border-top:1px solid #1e2235;display:flex;flex-wrap:wrap;gap:2rem;justify-content:space-between;align-items:baseline">
+<p style="font-size:.95rem;line-height:1.65;color:#8e95b3;margin:0;max-width:52ch">Next up — the OSS README and landing page, then the scan report: that is the artifact people share, so it deserves designing before the console.</p>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:#8e95b3;text-transform:uppercase">Mattei Systems · concept draft 02</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;platformName&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Gantry&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;highlightTrustLayer&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;detailMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;what we build&quot;,&quot;options&quot;:[&quot;what we build&quot;,&quot;how it scores&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { sel: 11 };
+
+  prims() {
+    return [
+      { n: "01", name: "Instruction", g: "Knowing", c: "Guide only",
+        wall: "Instructions are passive. They can say \u201cfollow convention\u201d but cannot discover it \u2014 which is why the chain continues.",
+        build: "Instruction packs are version-controlled artifacts, resolved per run and pinned into every call event. A run whose instruction bundle has no reviewed commit does not start.",
+        score: "Guide-only layers cap at 3. The platform ships the missing sensor: a checker that fails the build when a rule declared in the pack is violated in the diff." },
+      { n: "02", name: "Context delivery", g: "Knowing", c: "Guide + computational sensor",
+        wall: "Dumping everything in floods the window, so delivery alone is not enough.",
+        build: "Task-type manifests declare the material a task must receive. The gateway asserts every declared input actually reached the prompt, and records the assertion alongside the call.",
+        score: "Anchor 4 by construction. A missing input is a hard failure with a named cause, not a hallucination someone later blames on the model." },
+      { n: "03", name: "Context management", g: "Knowing", c: "Guide + computational sensor",
+        wall: "Wrong context is worse than missing context \u2014 a plausible distraction that fails confidently.",
+        build: "A window budget per task type, enforced rather than suggested. Retrieval runs over a persisted corpus graph with TTL-based staleness expiry, so stale material leaves on a schedule.",
+        score: "Window accounting is in every trace, which makes the budget auditable after the fact rather than aspirational before it." },
+      { n: "04", name: "Tool interface", g: "Acting", c: "Guide + computational sensor",
+        wall: "A tool can act, but nothing yet bounds what it can reach.",
+        build: "MCP is the wire protocol, so the ecosystem's tools work unmodified. A schema registry rejects loose definitions; tool output is tagged untrusted and cannot enter a decision unvalidated.",
+        score: "The registry refuses to publish \u201crun any shell command.\u201d That refusal is the sensor \u2014 the schema is only the guide." },
+      { n: "05", name: "Execution environment", g: "Acting", c: "Computational sensor",
+        wall: "Work now survives inside the turn but not across it.",
+        build: "Per-run isolation \u2014 microVM, gVisor or plain OCI depending on the host. Egress allowlist enforced at the network namespace. Credentials brokered: the model receives a handle, the broker injects the secret at the boundary.",
+        score: "Gaps here carry security-finding severity, so the score comes from an adversarial probe, never from reading the policy file. A permission written down but unenforced is a guide wearing a badge." },
+      { n: "06", name: "Durable state", g: "Continuity", c: "Computational sensor",
+        wall: "State survives, but nothing sequences the work or gates the irreversible parts of it.",
+        build: "Plans, checkpoints, task state and session memory live outside the model's attention. The corpus graph is persisted and traversable, so an agent navigates rather than re-reads.",
+        score: "Testable, so tested: kill the container mid-run and resume. A crash costs minutes, not the session." },
+      { n: "07", name: "Orchestration", g: "Continuity", c: "Guide + sensor",
+        wall: "One agent doing everything hits a context and competence ceiling.",
+        build: "A durable workflow engine with lifecycle hooks, retries, escalation paths, and gates that actually block. No irreversible step executes without a recorded decision attached to a resolvable identity.",
+        score: "A gate that never blocks is not a gate. Blocking events \u2014 and overrides \u2014 are first-class ledger entries." },
+      { n: "08", name: "Sub-agents", g: "Scaling", c: "Guide + inferential sensor",
+        wall: "Specialists multiply, and their expertise stays uncaptured.",
+        build: "Delegation with narrowed context, narrowed tools and a per-role policy. Returned work is judged against the parent's brief by an inferential sensor before it merges.",
+        score: "N/A where the workload never delegates. Absence of a need is not a gap, and a single-purpose tool should not be penalised for being one." },
+      { n: "09", name: "Skills", g: "Scaling", c: "Guide only",
+        wall: "Capability is broad now, and nothing proves any of it worked.",
+        build: "Signed, versioned skill packages. A resolver validates metadata at publish time and fails loudly when a skill's referenced steps stop resolving.",
+        score: "Guide-only, so capped at 3 by construction. The sensor that lifts it: fire when a skill is skipped, and when its steps rot. A skill with an invalid metadata block should never quietly pick up work by accident." },
+      { n: "10", name: "Verification", g: "Trust", c: "Sensor, both kinds",
+        wall: "Results are checked, but nobody can reconstruct how they were produced.",
+        build: "The sensor bus. Computational sensors on every change, inferential judges reserved for checkpoints. Verdict messages are schema'd to name the fix, because the reader is an agent, not a person.",
+        score: "Verification that never blocks anything is a 2. Every gate records whether it blocked, so the difference between a check and a gate is visible in the data." },
+      { n: "11", name: "Observability", g: "Trust", c: "Sensor, no guide",
+        wall: "The run is legible, and the authority it ran under is still undeclared.",
+        build: "Every model call, tool call, gate, verdict, approval and policy decision is one signed event in the transparency log. Runs replay end to end. Cost and latency attribute to the call.",
+        score: "Never N/A \u2014 any system that makes a model call can record that call, so no record means 0. Here recording is not a feature to remember: it is the chokepoint every call already passes through." },
+      { n: "12", name: "Governance", g: "Trust", c: "Guide + sensor",
+        wall: "This is the layer every compliance mapping runs through. A gap here stops being technical and becomes the finding an auditor writes.",
+        build: "Authority declared as code and evaluated per call, with scoped identity per agent. A drift detector reports \u2014 and names the fix \u2014 when the running system differs from the declaration.",
+        score: "The common gap is almost never missing authority. It is real authority, undeclared: a permission mode in someone's untracked local file while the tracked config claims otherwise. The drift check is what turns that into a build failure instead of a finding." }
+    ];
+  }
+
+  renderVals() {
+    const P = this.prims();
+    const i = Math.min(Math.max(this.state.sel, 0), 11);
+    const p = P[i];
+    const mode = this.props.detailMode ?? "what we build";
+    const cx = [52, 124, 196, 268, 340, 412, 484, 556, 628, 700, 772, 844];
+    const cy = [195, 171, 191, 159, 177, 145, 163, 131, 149, 117, 135, 103];
+    return {
+      platformName: this.props.platformName ?? "Gantry",
+      trustFill: (this.props.highlightTrustLayer ?? true) ? "rgba(43,127,232,0.05)" : "transparent",
+      onPick: (e) => {
+        const g = e.target.closest("[data-p]");
+        if (g) this.setState({ sel: parseInt(g.getAttribute("data-p"), 10) });
+      },
+      ringX: cx[i], ringY: cy[i],
+      selNum: p.n, selName: p.name, selGroup: p.g, selCarried: p.c, selWall: p.wall,
+      detailLabel: mode === "how it scores" ? "How it scores" : "What the platform provides",
+      selDetail: mode === "how it scores" ? p.score : p.build
+    };
+  }
+}
+</script>
+</body>
+</html>
