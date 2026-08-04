@@ -1,4 +1,5 @@
 pub mod event;
+pub mod gateway;
 pub mod ledger;
 pub mod merkle;
 
