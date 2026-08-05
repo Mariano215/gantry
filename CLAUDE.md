@@ -160,7 +160,22 @@ work item, and `gantry scan` on this repo is expected to report it.
   reads `seed_published` from the actor key registry beside the policy and
   refuses any non-laptop profile that declares such a key, before the run
   appends anything. — enforced by `src/runlog.rs` and `tests/broker.rs`
-  (`a_non_laptop_profile_declaring_a_published_seed_refuses_to_start`)
+  (`a_non_laptop_profile_declaring_a_published_seed_refuses_to_start`). A
+  harness generates its own key rather than inheriting one: `gantry template
+  init` writes a fresh 32-byte seed at `config/actor-key.seed` (mode 0600),
+  registers the public half in a `config/actor-keys.json` the template does
+  not carry, with an owner naming the harness and `seed_published` false, and
+  declares the key id that seed produces in the destination policy's
+  `profile_requirements.attestation`. The template ships no key material, so
+  no two installs share a signing identity. Every destination path is checked
+  before the first write and the seed is written last, so a refused init
+  leaves no half-written harness and no seed for a harness that does not
+  exist. — enforced by `src/main.rs` (`generate_actor_key`), `tests/broker.rs`
+  (`template_init_generates_a_per_harness_key_and_the_harness_signs`,
+  `a_refused_init_leaves_no_seed_and_never_clobbers_one`) and `ci/run.sh`
+  (`ci/template-init-signs`), which inits a harness on every push and fails if
+  it does not sign, if it signs under a published seed, or if its ledger does
+  not verify clean
 
 ## Code standards
 

@@ -26,8 +26,19 @@ cargo build --quiet
 gantry_bin="$PWD/target/debug/gantry"
 init_root=$(mktemp -d)
 cargo run --quiet -- template init templates/laptop "$init_root/harness" >/dev/null
-init_verify=$(cd "$init_root/harness" && "$gantry_bin" broker call .ledger Read instructions/pack.md >/dev/null && "$gantry_bin" ledger verify .ledger) || true
+if init_verify=$(cd "$init_root/harness" && "$gantry_bin" broker call .ledger Read instructions/pack.md >/dev/null && "$gantry_bin" ledger verify .ledger); then
+  init_status=0
+else
+  init_status=$?
+fi
 rm -rf "$init_root"
+# The exit status is checked before the output is, because verify prints its
+# verified count and then exits non-zero on a fault. Reading only the text
+# would pass a harness whose ledger does not check out.
+if [ "$init_status" != 0 ]; then
+  echo "the harness template init produced did not run and verify clean (exit $init_status): $init_verify. Fix: run gantry template init by hand into an empty directory and work through the first failing command"
+  exit 1
+fi
 case "$init_verify" in
   *"attestations verified against config/actor-keys.json"*)
     ;;
