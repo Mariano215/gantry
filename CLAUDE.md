@@ -43,7 +43,10 @@ work item, and `gantry scan` on this repo is expected to report it.
   targets, never as a real route out.
 - **Profiles never lie.** Scores derive from what is running, never from the
   profile name. A scorer that reads configuration instead of telemetry is
-  wrong. — `[UNENFORCED]` until slice 08
+  wrong. — enforced since slice 08 by `src/scorer.rs`, whose every predicate
+  is a statement about ledger events; it never reads a profile name or a
+  config value to score. The self-score (`README.md`, `docs/proof/08.md`)
+  lands at overall 2 precisely because telemetry, not prose, decides.
 - **Authority is declared, and the declaration is checked.** The running
   permission mode, the policy and the instruction pack each match what is
   tracked in version control. Observed divergence in slice 00: the session ran
