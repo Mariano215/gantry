@@ -46,12 +46,16 @@ work item, and `gantry scan` on this repo is expected to report it.
   unobserved. — `[UNENFORCED]` `ci/permission-mode-drift`
 - **A denial names its rule.** Every denied call resolves to a rule id in
   `docs/POLICY-SCHEMA.md`, so a denial short-circuited by the host permission
-  list is still explicable afterwards. — `[UNENFORCED]` `ci/policy-host-parity`
+  list is still explicable afterwards. — enforced since slice 03 by the
+  broker (every decision carries a rule id) and by `gantry policy check`
+  plus `tests/broker.rs` (`tracked_policy_has_host_parity`), which replay
+  each host deny entry through the policy
 - **No rule is unreachable.** A deny rule shadowed by an earlier broader allow
-  is a build failure. — `[UNENFORCED]` `ci/policy-shadow`
+  is a build failure. — enforced since slice 03 by `Policy::validate`, which
+  refuses to load such a policy; exercised by `tests/broker.rs` and proof 03
 - **Post-hoc review implies rollback.** Any capability whose rung and effect
   resolve to a `post` gate declares a rollback handle, or the policy refuses to
-  load. — `[UNENFORCED]` `ci/policy-rollback`
+  load. — enforced since slice 03 by `Policy::validate`
 - **An attestation is verified or declared unverified, never assumed.** The
   ledger verifier checks actor attestations against a registered key once a
   key registry exists; until then it counts them and says so in every report.

@@ -1,0 +1,10 @@
+# The development machine has a dashboard tool named `cc` shadowing the
+# system C compiler on PATH, which broke builds in slices 01 and 02 (see
+# docs/proof/02.md section 4). Pinning the linker here is the sensor-grade
+# fix: the build no longer depends on PATH order.
+[target.aarch64-apple-darwin]
+linker = "/usr/bin/cc"
+
+# Build scripts (ring's cc-rs) also resolve `cc` from PATH; pin it for them.
+[env]
+CC = "/usr/bin/cc"

@@ -2,7 +2,7 @@
 name = "gantry"
 version = "0.1.0"
 edition = "2021"
-description = "LLM-agnostic control plane for agentic engineering. Slice 01: evidence ledger."
+description = "LLM-agnostic control plane for agentic engineering. Slices so far: evidence ledger, model gateway, tool broker and policy engine."
 license = "Apache-2.0"
 
 [dependencies]

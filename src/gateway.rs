@@ -2,8 +2,8 @@
 //! GatewayRun, which appends the call to the evidence ledger. See
 //! docs/superpowers/specs/2026-08-04-model-gateway-design.md.
 
-use crate::event::NewEvent;
 use crate::ledger::{Ledger, SignedHead};
+use crate::runlog::RunCore;
 use crate::Fault;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -76,11 +76,7 @@ pub struct Pinning {
 /// An open run. Owning the only route to a model call is what makes the
 /// gateway a chokepoint rather than a convention.
 pub struct GatewayRun {
-    ledger: Ledger,
-    run_id: String,
-    next_seq: u64,
-    actor: Value,
-    authority: Value,
+    core: RunCore,
     cost_total_usd: f64,
 }
 
@@ -111,45 +107,46 @@ pub fn load_providers(path: &Path) -> Result<Vec<Provider>, Fault> {
     Ok(providers)
 }
 
-impl GatewayRun {
-    pub fn open(ledger: Ledger, workload: &str, pin: &Pinning) -> Result<GatewayRun, Fault> {
-        let instruction_version = file_hash(&pin.instructions)?;
-        let settings_hash = match &pin.settings {
+impl Pinning {
+    /// The `authority` block every event of a run carries, built once at open.
+    pub fn authority(&self, profile: &str, policy_version: &str) -> Result<Value, Fault> {
+        let settings_hash = match &self.settings {
             Some(p) => Value::String(file_hash(p)?),
             None => Value::Null,
         };
-        let authority = json!({
-            "profile": "laptop",
-            "policy_version": file_hash(&pin.policy)?,
-            "instruction_version": instruction_version,
+        Ok(json!({
+            "profile": profile,
+            "policy_version": policy_version,
+            "instruction_version": file_hash(&self.instructions)?,
             "settings_hash": settings_hash,
-            "diverged": pin.diverged.clone(),
-        });
+            "diverged": self.diverged.clone(),
+        }))
+    }
+}
+
+impl GatewayRun {
+    pub fn open(ledger: Ledger, workload: &str, pin: &Pinning) -> Result<GatewayRun, Fault> {
+        let policy_version = file_hash(&pin.policy)?;
+        let authority = pin.authority("laptop", &policy_version)?;
         let actor = json!({
             "type": "agent",
             "id": "agent:gantry-run",
             "identity_source": "local",
             "rung": "assisted",
         });
-        let d = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default();
-        let run_id = format!("run-{}", d.as_millis());
+        let instruction_pack = authority["instruction_version"].clone();
+        let settings_hash = authority["settings_hash"].clone();
         let mut run = GatewayRun {
-            ledger,
-            run_id,
-            next_seq: 0,
-            actor,
-            authority,
+            core: RunCore::open(ledger, actor, authority),
             cost_total_usd: 0.0,
         };
-        run.append_event(
+        run.core.append(
             "run.open",
             json!({
                 "profile": "laptop",
                 "workload": workload,
-                "instruction_pack": instruction_version,
-                "settings_hash": run.authority["settings_hash"],
+                "instruction_pack": instruction_pack,
+                "settings_hash": settings_hash,
                 "restored_checkpoint": null,
             }),
         )?;
@@ -157,60 +154,37 @@ impl GatewayRun {
     }
 
     pub fn run_id(&self) -> &str {
-        &self.run_id
+        self.core.run_id()
     }
 
-    pub fn seal(mut self, outcome: &str) -> Result<SignedHead, Fault> {
-        let head_at_seal = self.ledger.latest_head()?;
-        let head_at_seal = serde_json::to_value(&head_at_seal).map_err(|e| {
-            Fault::new(
-                format!("SignedHead did not serialise: {e}"),
-                "report this as a bug; SignedHead is serialisable by construction",
-            )
-        })?;
-        let event_count = self.next_seq;
+    pub fn seal(self, outcome: &str) -> Result<SignedHead, Fault> {
         let cost = self.cost_total_usd;
-        self.append_event(
-            "run.seal",
-            json!({
-                "outcome": outcome,
-                "event_count": event_count,
-                "head_at_seal": head_at_seal,
-                "cost_total_usd": cost,
-            }),
-        )?;
-        self.ledger.latest_head()
+        self.core.seal(json!({ "cost_total_usd": cost }), outcome)
     }
 
     fn append_event(&mut self, kind: &str, subject: Value) -> Result<(), Fault> {
-        let seq = self.next_seq;
-        self.next_seq += 1;
-        self.ledger.append(NewEvent {
-            id: format!("{}-{seq}", self.run_id),
-            run_id: self.run_id.clone(),
-            parent_id: None,
-            seq,
-            ts: rfc3339_now(),
-            kind: kind.to_string(),
-            actor: self.actor.clone(),
-            authority: self.authority.clone(),
-            subject,
-            redacted: Vec::new(),
-            attestation: None,
-        })?;
-        Ok(())
+        self.core.append(kind, subject)
     }
 
     /// The chokepoint. Issues one chat completion and appends the call to the
     /// ledger whether it succeeded or not. The key never leaves this frame.
-    pub fn call(&mut self, provider: &Provider, messages: &[ChatMessage]) -> Result<CallResult, Fault> {
+    pub fn call(
+        &mut self,
+        provider: &Provider,
+        messages: &[ChatMessage],
+    ) -> Result<CallResult, Fault> {
         let key = match &provider.key_env {
             Some(var) => match std::env::var(var) {
                 Ok(v) if !v.is_empty() => Some(v),
                 _ => {
                     return Err(Fault::new(
-                        format!("provider {} needs a key in ${var}, which is unset or empty", provider.name),
-                        format!("export {var} before running, or drop key_env from the provider entry"),
+                        format!(
+                            "provider {} needs a key in ${var}, which is unset or empty",
+                            provider.name
+                        ),
+                        format!(
+                            "export {var} before running, or drop key_env from the provider entry"
+                        ),
                     ))
                 }
             },
@@ -239,13 +213,16 @@ impl GatewayRun {
                 let completion_tokens_seen = resp["usage"]["completion_tokens"].as_u64();
                 let prompt_tokens = prompt_tokens_seen.unwrap_or(0);
                 let completion_tokens = completion_tokens_seen.unwrap_or(0);
-                let cost_usd = prompt_tokens_seen.zip(completion_tokens_seen).map(|(p, c)| {
-                    // Token counts are far below 2^52, so the f64 conversion is exact.
-                    #[allow(clippy::cast_precision_loss)]
-                    let cost = (p as f64 * provider.cost_in_per_mtok + c as f64 * provider.cost_out_per_mtok)
-                        / 1_000_000.0;
-                    cost
-                });
+                let cost_usd = prompt_tokens_seen
+                    .zip(completion_tokens_seen)
+                    .map(|(p, c)| {
+                        // Token counts are far below 2^52, so the f64 conversion is exact.
+                        #[allow(clippy::cast_precision_loss)]
+                        let cost = (p as f64 * provider.cost_in_per_mtok
+                            + c as f64 * provider.cost_out_per_mtok)
+                            / 1_000_000.0;
+                        cost
+                    });
                 if let Some(cost) = cost_usd {
                     self.cost_total_usd += cost;
                 }
@@ -266,7 +243,12 @@ impl GatewayRun {
                         "error": null,
                     }),
                 )?;
-                Ok(CallResult { content, prompt_tokens, completion_tokens, latency_ms })
+                Ok(CallResult {
+                    content,
+                    prompt_tokens,
+                    completion_tokens,
+                    latency_ms,
+                })
             }
             Err(err) => {
                 self.append_event(
@@ -287,7 +269,10 @@ impl GatewayRun {
                     }),
                 )?;
                 Err(Fault::new(
-                    format!("model call to {} failed and is on the ledger: {}", provider.name, err.human_cause),
+                    format!(
+                        "model call to {} failed and is on the ledger: {}",
+                        provider.name, err.human_cause
+                    ),
                     err.fix,
                 ))
             }
@@ -303,7 +288,10 @@ pub struct ChatMessage {
 }
 
 pub fn msg(role: &str, content: &str) -> ChatMessage {
-    ChatMessage { role: role.to_string(), content: content.to_string() }
+    ChatMessage {
+        role: role.to_string(),
+        content: content.to_string(),
+    }
 }
 
 /// What a successful call hands back to the caller, after the ledger entry
@@ -371,7 +359,8 @@ fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, C
                 ledger_cause: cause.clone(),
                 human_cause: cause,
                 body_hash: None,
-                fix: "check the base_url, the network route, and that the endpoint is up".to_string(),
+                fix: "check the base_url, the network route, and that the endpoint is up"
+                    .to_string(),
             })
         }
     }
@@ -385,9 +374,15 @@ mod tests {
     fn rfc3339_known_instants() {
         assert_eq!(rfc3339_from_unix(0, 0), "1970-01-01T00:00:00.000Z");
         // date -u -r 1785873600 => 2026-08-04T20:00:00Z
-        assert_eq!(rfc3339_from_unix(1_785_873_600, 481), "2026-08-04T20:00:00.481Z");
+        assert_eq!(
+            rfc3339_from_unix(1_785_873_600, 481),
+            "2026-08-04T20:00:00.481Z"
+        );
         // leap-year boundary: 2024-02-29T00:00:00Z
-        assert_eq!(rfc3339_from_unix(1_709_164_800, 0), "2024-02-29T00:00:00.000Z");
+        assert_eq!(
+            rfc3339_from_unix(1_709_164_800, 0),
+            "2024-02-29T00:00:00.000Z"
+        );
     }
 
     #[test]

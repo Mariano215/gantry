@@ -2,9 +2,11 @@
 //! plus printing; the verification logic lives in gantry::ledger so the
 //! offline verifier is the library, not this file.
 
+use gantry::broker::{BrokerRun, ToolDef};
 use gantry::event::NewEvent;
 use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::ledger::{self, InclusionBundle, Ledger};
+use gantry::policy::Policy;
 use gantry::Fault;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -21,7 +23,10 @@ const USAGE: &str = "usage:
   gantry ledger verify-inclusion <bundle.json> <pubkey-file>
   gantry ledger consistency <dir> <m>
   gantry ledger expire <dir> <subject_hash>         (NewEvent JSON on stdin)
-  gantry run <providers.json> <provider-name> <ledger-dir>";
+  gantry run <providers.json> <provider-name> <ledger-dir>
+  gantry policy check <policy.json> [settings.json]
+  gantry broker register <ledger-dir> <tool-def.json>
+  gantry broker call <ledger-dir> <tool> <target>";
 
 fn main() {
     match run() {
@@ -159,9 +164,108 @@ fn run() -> Result<i32, Fault> {
             println!("sealed: run {} with {} ledger entries", run_id, head.size);
             Ok(0)
         }
+        ["policy", "check", policy_path] => policy_check(policy_path, None),
+        ["policy", "check", policy_path, settings_path] => {
+            policy_check(policy_path, Some(settings_path))
+        }
+        ["broker", "register", ledger_dir, def_path] => {
+            let mut run = open_broker(ledger_dir, "tool-registration")?;
+            let def_text = read_file(def_path)?;
+            let def: ToolDef = serde_json::from_str(&def_text).map_err(|e| {
+                Fault::new(
+                    format!("{def_path} does not parse as a tool definition: {e}"),
+                    "send the MCP shape: name, description, inputSchema",
+                )
+            })?;
+            let outcome = run.register(&def);
+            let sealed = run.seal("complete")?;
+            match outcome {
+                Ok(()) => {
+                    println!(
+                        "registered {} (ledger sealed at size {})",
+                        def.name, sealed.size
+                    );
+                    Ok(0)
+                }
+                Err(fault) => {
+                    eprintln!("{fault}");
+                    println!("rejection recorded (ledger sealed at size {})", sealed.size);
+                    Ok(1)
+                }
+            }
+        }
+        ["broker", "call", ledger_dir, tool, target] => {
+            let mut run = open_broker(ledger_dir, "broker-call")?;
+            let outcome = run.call(tool, target);
+            let sealed = run.seal("complete")?;
+            match outcome {
+                Ok(result) => {
+                    print!("{}", result.content);
+                    println!(
+                        "[taint: {}] (ledger sealed at size {})",
+                        result.taint, sealed.size
+                    );
+                    Ok(0)
+                }
+                Err(fault) => {
+                    eprintln!("{fault}");
+                    println!("refusal recorded (ledger sealed at size {})", sealed.size);
+                    Ok(1)
+                }
+            }
+        }
         [] => Err(usage_fault("no subcommand given")),
         _ => Err(usage_fault(format!("unknown command: {}", args.join(" ")))),
     }
+}
+
+/// Loads the machine policy, prints its computed version, and runs the
+/// checks that make the policy document trustworthy: shadow and rollback at
+/// load, host parity when a settings file is given.
+fn policy_check(policy_path: &str, settings_path: Option<&str>) -> Result<i32, Fault> {
+    let policy = Policy::load(Path::new(policy_path))?;
+    println!(
+        "policy loads clean: {} rules, {} capabilities, version {}",
+        policy.rules.len(),
+        policy.capabilities.len(),
+        policy.policy_version.clone().unwrap_or_default()
+    );
+    let mut exit = 0;
+    if let Some(sp) = settings_path {
+        let faults = policy.host_parity(&read_file(sp)?)?;
+        if faults.is_empty() {
+            println!("host parity: every deny entry in {sp} resolves to deny or hold here");
+        } else {
+            for f in &faults {
+                println!("host parity: {f}");
+            }
+            exit = 1;
+        }
+    }
+    Ok(exit)
+}
+
+/// Opens (or initialises) the ledger and a broker run against the tracked
+/// machine policy, with builtins registered and authority pinned the same
+/// way `gantry run` pins it.
+fn open_broker(ledger_dir: &str, workload: &str) -> Result<BrokerRun, Fault> {
+    let dir = Path::new(ledger_dir);
+    let ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let settings_path = Path::new(".claude/settings.json");
+    let pin = Pinning {
+        policy: "config/policy.json".into(),
+        instructions: Path::new("instructions/pack.md").into(),
+        settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+        diverged: settings_divergence(settings_path),
+    };
+    let mut run = BrokerRun::open(ledger, policy, workload, &pin)?;
+    run.register_builtins()?;
+    Ok(run)
 }
 
 /// Compares the tracked `.claude/settings.json` (the git HEAD blob) against

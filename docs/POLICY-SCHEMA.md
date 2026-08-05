@@ -1,8 +1,26 @@
-# Policy schema, slice 00
+# Policy schema, slice 00 (evaluator landed in slice 03)
 
 Companion to `docs/EVENT-SCHEMA.md`. The event schema says what happened. This
 document says what was allowed to happen, and under whose authority. One
 `policy.decision` event is the output of one evaluation of this document.
+
+Since slice 03 the machine form of this document is `config/policy.json`,
+loaded and evaluated by `src/policy.rs`. Changes against the slice 00 shape,
+each reflected in the computed `policy_version`:
+
+- **`match.path_in` is generalised to `match.target_in`** and is matched
+  against the request target whatever its kind: a path for file tools, a
+  command line for shell, a host for egress. `path_in` remains accepted as an
+  alias.
+- **`policy_version` is computed by the loader** over the RFC 8785 form of
+  the parsed document with the field itself omitted. A hand-written value
+  that does not match the content refuses to load.
+- The load-time checks promised below are running: a shadowed rule, a post
+  gate without a rollback handle, and a deny or hold rule without a message
+  each refuse to load. Host parity runs in `gantry policy check`. The shadow
+  check is conservative: it only flags coverage it can prove (an absent
+  constraint, or pattern sets where each later pattern is matched by an
+  earlier one), so it cannot false-positive.
 
 Primitive 12 is a guide plus a sensor. The guide is this document. The sensor
 is the drift check that compares every declared value here against an observed
@@ -274,13 +292,14 @@ The rule that follows: rules that must produce evidence live here, and the host
 an evidence gap (credential files, egress). Those entries are duplicated in
 both places deliberately, and the duplication is checked.
 
-- `[UNENFORCED]` `ci/policy-shadow`: no rule is unreachable behind an earlier
-  broader rule.
-- `[UNENFORCED]` `ci/policy-host-parity`: every host `deny` entry has a
-  corresponding rule here, so a short-circuited denial is at least explicable
-  after the fact.
-- `[UNENFORCED]` `ci/policy-rollback`: every capability whose rung and effect
-  resolve to a `post` gate declares a `rollback` handle.
+- `ci/policy-shadow`: no rule is unreachable behind an earlier broader rule.
+  — enforced at load by `Policy::validate` since slice 03
+- `ci/policy-host-parity`: every host `deny` entry has a corresponding rule
+  here, so a short-circuited denial is at least explicable after the fact.
+  — enforced by `gantry policy check` and `tests/broker.rs` since slice 03
+- `ci/policy-rollback`: every capability whose rung and effect resolve to a
+  `post` gate declares a `rollback` handle. — enforced at load by
+  `Policy::validate` since slice 03
 
 ## Non-goals for slice 00
 
