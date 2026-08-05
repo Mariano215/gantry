@@ -122,7 +122,7 @@ Defined here because a stranger cannot verify what is not written down
 | `approval` | 07 · 12 | Approver identity and source, **verdict (`approve`, `deny`)**, what was decided, the policy that required it, elapsed time to decision. A human refusing is an approval with `verdict: deny`, not an absent event (finding 5). |
 | `capability.run` | 06 · 07 | Capability, the rung in force, and the outcome (`clean`, `sensor.fail`) of one orchestrated run. Added in slice 06: this is the unit the trust budget counts, so the rung a capability holds is replayable from these plus `rung.change`. |
 | `rung.change` | 07 | Capability, from, to, trigger (earned, override, demotion), the sensor history that justified it, approver if any. |
-| `state.checkpoint` | 06 | Checkpoint id, what it covers, size, and what a resume from it restores. |
+| `state.checkpoint` | 06 | Checkpoint id, what it covers, the next step index, what a resume restores, and the accumulated per-step results. Slice 07 uses this as a complete restore point: a resume reads the last one for a task and continues, and the seam (a run that opened but never sealed) is the kill point. |
 | `drift.report` | 12 | Declared value, running value, and the named fix. Emitted on a schedule, not only on change, so silence is evidence. |
 | `score.snapshot` | all | Twelve scores with N/A where unexercised, the overall minimum, the scoring-rules version, and an evidence pointer per score. |
 | `ledger.anchor` | 11 | Where the head was anchored (WORM path, RFC 3161 TSA, notary), the head anchored, and the receipt hash (finding 5). |

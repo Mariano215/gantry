@@ -3,13 +3,16 @@
 //! offline verifier is the library, not this file.
 
 use gantry::broker::{BrokerRun, ToolDef};
+use gantry::durable::DurableRun;
 use gantry::event::NewEvent;
 use gantry::gateway::{self, msg, GatewayRun, Pinning};
+use gantry::graph::Graph;
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::policy::Policy;
 use gantry::sensor::{Sensor, SensorRun, Verdict};
 use gantry::trust::Orchestrator;
 use gantry::Fault;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
@@ -33,7 +36,12 @@ const USAGE: &str = "usage:
   gantry sensor gate <ledger-dir> <sensor.json> <artifact>
   gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>
   gantry orchestrate step <ledger-dir> <capability> <sensor.json> <artifact> [approver]
-  gantry trust history <ledger-dir> <capability>";
+  gantry trust history <ledger-dir> <capability>
+  gantry durable run <ledger-dir> <task-id> <crash-after|-> <file>...
+  gantry durable resume <ledger-dir> <task-id> <file>...
+  gantry durable show <ledger-dir> <task-id>
+  gantry graph build <graph.json> <file>...
+  gantry graph compare <graph.json> <symbol> <file>...";
 
 fn main() {
     match run() {
@@ -237,6 +245,19 @@ fn run() -> Result<i32, Fault> {
             )
         }
         ["trust", "history", ledger_dir, capability] => trust_history(ledger_dir, capability),
+        ["durable", "run", ledger_dir, task_id, crash_after, files @ ..] if !files.is_empty() => {
+            durable_run(ledger_dir, task_id, crash_after, files)
+        }
+        ["durable", "resume", ledger_dir, task_id, files @ ..] if !files.is_empty() => {
+            durable_resume(ledger_dir, task_id, files)
+        }
+        ["durable", "show", ledger_dir, task_id] => durable_show(ledger_dir, task_id),
+        ["graph", "build", graph_path, files @ ..] if !files.is_empty() => {
+            graph_build(graph_path, files)
+        }
+        ["graph", "compare", graph_path, symbol, files @ ..] if !files.is_empty() => {
+            graph_compare(graph_path, symbol, files)
+        }
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -345,6 +366,178 @@ fn audit(
     let head = run.seal("complete")?;
     println!("sealed at ledger size {}", head.size);
     Ok(exit)
+}
+
+/// Process a list of files as a durable task, checkpointing after each. With
+/// a numeric crash-after, the process exits without sealing once that many
+/// steps are done, which is the kill the resume recovers from; `-` runs to
+/// completion.
+fn durable_run(
+    ledger_dir: &str,
+    task_id: &str,
+    crash_after: &str,
+    files: &[&str],
+) -> Result<i32, Fault> {
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let dir = Path::new(ledger_dir);
+    let ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let mut run = DurableRun::open(ledger, &policy, task_id, &durable_pin())?;
+    let crash = if crash_after == "-" {
+        None
+    } else {
+        Some(
+            crash_after
+                .parse::<usize>()
+                .map_err(|_| usage_fault(format!("{crash_after} is not a step count or -")))?,
+        )
+    };
+    for (i, file) in files.iter().enumerate() {
+        let bytes = fs::read(file).map_err(|e| {
+            Fault::new(
+                format!("cannot read step file {file}: {e}"),
+                "check the path; every durable step reads one file",
+            )
+        })?;
+        let result = json!({
+            "file": file,
+            "bytes": bytes.len(),
+            "hash": format!("sha256:{}", hex::encode(Sha256::digest(&bytes))),
+        });
+        run.checkpoint_step(i, file, result)?;
+        println!(
+            "[durable] step {i} done: {file} ({} bytes), checkpointed",
+            bytes.len()
+        );
+        if crash == Some(i + 1) {
+            // The kill: leave the run unsealed and exit non-zero. Everything
+            // through this checkpoint is already on the append-only ledger.
+            eprintln!("[durable] simulating a crash after step {i}; run left unsealed");
+            process::exit(137);
+        }
+    }
+    let head = run.seal("complete")?;
+    println!("[durable] sealed at ledger size {}", head.size);
+    Ok(0)
+}
+
+/// Continue a killed durable task from its last checkpoint on the ledger.
+fn durable_resume(ledger_dir: &str, task_id: &str, files: &[&str]) -> Result<i32, Fault> {
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let ledger = Ledger::open(Path::new(ledger_dir))?;
+    let (mut run, restored) = DurableRun::resume(ledger, &policy, task_id, &durable_pin())?;
+    println!(
+        "[durable] resumed from {} at step {} ({} results restored)",
+        restored.checkpoint_id,
+        restored.next_step,
+        restored.results.len()
+    );
+    for (i, file) in files.iter().enumerate().skip(restored.next_step) {
+        let file = *file;
+        let bytes = fs::read(file).map_err(|e| {
+            Fault::new(
+                format!("cannot read step file {file}: {e}"),
+                "pass the same file list as the original run",
+            )
+        })?;
+        let result = json!({
+            "file": file,
+            "bytes": bytes.len(),
+            "hash": format!("sha256:{}", hex::encode(Sha256::digest(&bytes))),
+        });
+        run.checkpoint_step(i, file, result)?;
+        println!(
+            "[durable] step {i} done: {file} ({} bytes), checkpointed",
+            bytes.len()
+        );
+    }
+    let total = run.results().len();
+    let head = run.seal("complete")?;
+    println!(
+        "[durable] sealed at ledger size {head_size} with {total} total steps",
+        head_size = head.size
+    );
+    Ok(0)
+}
+
+/// Print the seam for a durable task: which run stopped where, which restored.
+fn durable_show(ledger_dir: &str, task_id: &str) -> Result<i32, Fault> {
+    let ledger = Ledger::open(Path::new(ledger_dir))?;
+    let events = ledger.events_with_subjects()?;
+    println!("durable task {task_id}:");
+    for line in gantry::durable::seam(&events, task_id) {
+        println!("  {line}");
+    }
+    Ok(0)
+}
+
+fn durable_pin() -> Pinning {
+    let settings_path = Path::new(".claude/settings.json");
+    Pinning {
+        policy: "config/policy.json".into(),
+        instructions: Path::new("instructions/pack.md").into(),
+        settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+        diverged: settings_divergence(settings_path),
+    }
+}
+
+fn graph_build(graph_path: &str, files: &[&str]) -> Result<i32, Fault> {
+    let paths: Vec<std::path::PathBuf> = files.iter().map(std::path::PathBuf::from).collect();
+    let graph = Graph::build(&paths)?;
+    graph.save(Path::new(graph_path))?;
+    println!(
+        "graph built: {} nodes, index {} bytes, saved to {graph_path}",
+        graph.nodes.len(),
+        graph.index_bytes()
+    );
+    Ok(0)
+}
+
+/// Answer the same symbol query two ways and print the token (byte) and
+/// accuracy delta, including whether the graph lost to the flat scan.
+fn graph_compare(graph_path: &str, symbol: &str, files: &[&str]) -> Result<i32, Fault> {
+    let paths: Vec<std::path::PathBuf> = files.iter().map(std::path::PathBuf::from).collect();
+    let graph = Graph::load(Path::new(graph_path))?;
+    let flat = gantry::graph::flat_query(&paths, symbol)?;
+    let graph_fast = graph.query(symbol, false)?;
+    let graph_expired = graph.query(symbol, true)?;
+
+    println!("query: {symbol}");
+    println!(
+        "  flat:          {} hit(s), {} bytes read",
+        flat.hits.len(),
+        flat.bytes_read
+    );
+    println!(
+        "  graph (fast):  {} hit(s), {} bytes read",
+        graph_fast.hits.len(),
+        graph_fast.bytes_read
+    );
+    println!(
+        "  graph (expiry):{} hit(s), {} bytes read, {} stale re-read",
+        graph_expired.hits.len(),
+        graph_expired.bytes_read,
+        graph_expired.stale_reread.len()
+    );
+    let saved = flat.bytes_read as i64 - graph_fast.bytes_read as i64;
+    println!("  byte delta (flat - graph fast): {saved}");
+    if graph_fast.hits != flat.hits {
+        println!(
+            "  ACCURACY: the fast graph disagreed with flat (stale index). Correct answer is flat: {:?}",
+            flat.hits
+        );
+        if graph_expired.hits == flat.hits {
+            println!(
+                "  expiry re-read recovered the correct answer at the cost of the stale files"
+            );
+        }
+    } else {
+        println!("  ACCURACY: fast graph agreed with flat");
+    }
+    Ok(0)
 }
 
 /// One orchestrated step against the tracked policy: run the capability's
