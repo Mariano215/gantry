@@ -3,6 +3,7 @@
 //! offline verifier is the library, not this file.
 
 use gantry::event::NewEvent;
+use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::Fault;
 use std::env;
@@ -18,7 +19,8 @@ const USAGE: &str = "usage:
   gantry ledger prove <dir> <index>
   gantry ledger verify-inclusion <bundle.json> <pubkey-file>
   gantry ledger consistency <dir> <m>
-  gantry ledger expire <dir> <subject_hash>         (NewEvent JSON on stdin)";
+  gantry ledger expire <dir> <subject_hash>         (NewEvent JSON on stdin)
+  gantry run <providers.json> <provider-name> <ledger-dir>";
 
 fn main() {
     match run() {
@@ -108,6 +110,51 @@ fn run() -> Result<i32, Fault> {
             let mut ledger = Ledger::open(Path::new(dir))?;
             let envelope = ledger.expire(subject_hash, read_new_event()?)?;
             println!("{}", to_json(&envelope)?);
+            Ok(0)
+        }
+        ["run", providers_path, name, ledger_dir] => {
+            let providers = gateway::load_providers(Path::new(providers_path))?;
+            let provider = providers.iter().find(|p| p.name == *name).ok_or_else(|| {
+                let names: Vec<&str> = providers.iter().map(|p| p.name.as_str()).collect();
+                Fault::new(
+                    format!("no provider named {name} in {providers_path}"),
+                    format!("use one of: {}", names.join(", ")),
+                )
+            })?;
+            let dir = Path::new(ledger_dir);
+            let ledger = if dir.join("events.jsonl").exists() {
+                Ledger::open(dir)?
+            } else {
+                Ledger::init(dir)?
+            };
+            let pack_path = Path::new("instructions/pack.md");
+            let pin = Pinning {
+                policy: "docs/POLICY-SCHEMA.md".into(),
+                instructions: pack_path.into(),
+                settings: Some(Path::new(".claude/settings.json"))
+                    .filter(|p| p.exists())
+                    .map(Into::into),
+            };
+            let system = read_file(&pack_path.display().to_string())?;
+            let mut run = GatewayRun::open(ledger, "gateway-smoke", &pin)?;
+            let q1 = "Name the single biggest risk of an unsigned tool registry.";
+            // If a call fails, ? propagates the Fault after the event is already on the
+            // ledger; the run is left unsealed, which is itself honest evidence.
+            let a1 = run.call(provider, &[msg("system", &system), msg("user", q1)])?;
+            println!("[{}] {}", provider.name, a1.content.trim());
+            let q2 = "Name one mitigation for that risk.";
+            let a2 = run.call(
+                provider,
+                &[
+                    msg("system", &system),
+                    msg("user", q1),
+                    msg("assistant", &a1.content),
+                    msg("user", q2),
+                ],
+            )?;
+            println!("[{}] {}", provider.name, a2.content.trim());
+            let head = run.seal("complete")?;
+            println!("sealed: {} events, head size {}", head.size, head.size);
             Ok(0)
         }
         [] => Err(usage_fault("no subcommand given")),
