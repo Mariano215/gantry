@@ -117,6 +117,109 @@ fn fixture_ledger(name: &str) -> PathBuf {
     dir
 }
 
+/// Four held calls, one per state the inbox has to keep apart: nobody looked,
+/// somebody said no, somebody said yes, and a grant already spent by a retry
+/// with the call held again after it. The broker emits tool.request and then
+/// exactly one policy.decision, so the order here is the order the pairing
+/// depends on.
+fn hold_ledger(name: &str) -> PathBuf {
+    let dir = workdir(name).join("ledger");
+    let mut ledger = Ledger::init(&dir).unwrap();
+    let mut seq = 0u64;
+    let mut events: Vec<NewEvent> = Vec::new();
+    let held = |call: &str, target: &str, req: &str, s: &mut u64| {
+        let base = *s;
+        *s += 2;
+        vec![
+            event(
+                "run-3000",
+                base,
+                &format!("2026-08-05T11:00:{base:02}.000Z"),
+                "tool.request",
+                json!({"request_id": req, "call_hash": call, "tool": "Bash", "args": {"command": target}}),
+            ),
+            event(
+                "run-3000",
+                base + 1,
+                &format!("2026-08-05T11:00:{:02}.000Z", base + 1),
+                "policy.decision",
+                json!({
+                    "verdict": "hold",
+                    "capability": "vcs.publish",
+                    "rule": "r-publish",
+                    "message": "This call gates pre and needs an approval event before it can proceed.",
+                    "request": {"tool": "Bash", "target": target},
+                }),
+            ),
+        ]
+    };
+    events.extend(held(
+        "sha256:aaa",
+        "git push origin main",
+        "req-a",
+        &mut seq,
+    ));
+    events.extend(held(
+        "sha256:bbb",
+        "git push origin release",
+        "req-b",
+        &mut seq,
+    ));
+    events.extend(held(
+        "sha256:ccc",
+        "git push origin docs",
+        "req-c",
+        &mut seq,
+    ));
+    events.extend(held(
+        "sha256:ddd",
+        "git push origin spent",
+        "req-d",
+        &mut seq,
+    ));
+    for (grant, verdict, call) in [
+        ("g-b", "deny", "sha256:bbb"),
+        ("g-c", "approve", "sha256:ccc"),
+        ("g-d", "approve", "sha256:ddd"),
+    ] {
+        events.push(event(
+            "run-3000",
+            seq,
+            &format!("2026-08-05T11:00:{seq:02}.000Z"),
+            "approval",
+            json!({
+                "grant_id": grant,
+                "verdict": verdict,
+                "call_hash": call,
+                "rule": "r-publish",
+                "approver": "user:mariano@local",
+                "approver_source": "local",
+                "request_id": "req-x",
+            }),
+        ));
+        seq += 1;
+    }
+    // The spent grant, and the same call held again after it.
+    events.push(event(
+        "run-3000",
+        seq,
+        &format!("2026-08-05T11:00:{seq:02}.000Z"),
+        "approval.use",
+        json!({"grant_id": "g-d", "call_hash": "sha256:ddd", "rule": "r-publish", "approver": "user:mariano@local", "self_approved": true}),
+    ));
+    seq += 1;
+    events.extend(held(
+        "sha256:ddd",
+        "git push origin spent",
+        "req-d2",
+        &mut seq,
+    ));
+    for ev in events {
+        ledger.append(ev).unwrap();
+    }
+    dir
+}
+
 // -- a client, because the suite may not reach for an HTTP crate ------------
 
 struct Reply {
@@ -417,6 +520,101 @@ fn a_long_query_is_answered_whole_or_refused_never_truncated() {
     assert_eq!(refused.status, 400, "body: {}", refused.body);
     let fault = refused.json();
     assert!(fault["cause"].is_string() && fault["fix"].is_string());
+}
+
+#[test]
+fn the_inbox_names_every_held_call_and_what_the_record_says_about_it() {
+    let ledger = hold_ledger("approvals");
+    let addr = serve(&ledger);
+    let a = get(addr, "/api/approvals").json();
+
+    let holds = a["holds"].as_array().unwrap();
+    // Four distinct calls, and the call held twice is one row and not two:
+    // a grant binds to the call hash, so that is the unit an approver acts on.
+    assert_eq!(holds.len(), 4, "holds: {holds:#?}");
+    let by_hash = |h: &str| {
+        holds
+            .iter()
+            .find(|x| x["call_hash"] == json!(h))
+            .cloned()
+            .unwrap_or_else(|| panic!("no hold for {h}"))
+    };
+
+    // Nobody looked.
+    let a_hold = by_hash("sha256:aaa");
+    assert_eq!(a_hold["state"], json!("waiting"));
+    assert_eq!(a_hold["releases_next_call"], json!(false));
+    assert_eq!(a_hold["grants"], json!([]));
+    assert_eq!(a_hold["rule"], json!("r-publish"));
+    assert_eq!(a_hold["capability"], json!("vcs.publish"));
+    assert_eq!(a_hold["tool"], json!("Bash"));
+    assert_eq!(a_hold["target"], json!("git push origin main"));
+    assert_eq!(a_hold["held"], json!(1));
+    assert_eq!(a_hold["request_id"], json!("req-a"));
+    assert!(a_hold["message"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("approval event"));
+    // The command is the whole point of the view: an operator who has to grep
+    // a ledger to find out a run is blocked on them has no inbox at all.
+    let cmd = a_hold["approve_command"].as_str().unwrap();
+    assert!(
+        cmd.starts_with("gantry approve /") && cmd.contains(" req-a "),
+        "the command must be runnable as printed: {cmd}"
+    );
+
+    // Somebody said no. A refusal is a state, not an absence, and it releases
+    // nothing.
+    let b = by_hash("sha256:bbb");
+    assert_eq!(b["state"], json!("refused"));
+    assert_eq!(b["releases_next_call"], json!(false));
+    assert_eq!(b["grants"][0]["verdict"], json!("deny"));
+    assert_eq!(b["grants"][0]["approver"], json!("user:mariano@local"));
+    assert_eq!(b["grants"][0]["spent"], json!(false));
+    assert_eq!(b["grants"][0]["permitted"], json!(true));
+
+    // Somebody said yes, and the retry has not happened.
+    let c = by_hash("sha256:ccc");
+    assert_eq!(c["state"], json!("released"));
+    assert_eq!(c["releases_next_call"], json!(true));
+
+    // A grant already spent by a retry, with the call held again after it. A
+    // single-use grant that looks usable would be the worst row on the page.
+    let d = by_hash("sha256:ddd");
+    assert_eq!(d["state"], json!("spent"));
+    assert_eq!(d["releases_next_call"], json!(false));
+    assert_eq!(d["grants"][0]["spent"], json!(true));
+    assert!(d["grants"][0]["spent_at"].is_string());
+    assert_eq!(d["held"], json!(2), "the retry is the same hold, counted");
+    assert_eq!(
+        d["request_id"],
+        json!("req-d2"),
+        "the command names the most recent request, which is the one still held"
+    );
+
+    assert_eq!(a["blocked"], json!(3));
+    assert_eq!(a["released"], json!(1));
+    // The tracked laptop policy permits any approver, and the view has to say
+    // so: self approval is permitted here and recorded rather than refused.
+    assert_eq!(a["approvers"], json!("any"));
+    assert!(a["ledger"].as_str().unwrap().starts_with('/'));
+
+    // Still read-only. The route that names the command refuses to be one.
+    let post = raw(
+        addr,
+        "POST /api/approvals HTTP/1.1\r\nhost: localhost\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+    );
+    assert_eq!(post.status, 405);
+}
+
+#[test]
+fn a_ledger_with_no_hold_has_an_empty_inbox_rather_than_no_route() {
+    let ledger = fixture_ledger("no-holds");
+    let addr = serve(&ledger);
+    let a = get(addr, "/api/approvals").json();
+    assert_eq!(a["holds"], json!([]));
+    assert_eq!(a["blocked"], json!(0));
+    assert_eq!(a["released"], json!(0));
 }
 
 // -- refusals ---------------------------------------------------------------

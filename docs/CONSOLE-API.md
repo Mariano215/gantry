@@ -232,6 +232,94 @@ Each capability's rung replayed from the ledger, never read from config.
 differ, the earned one is what the broker gates on, and the console must make
 which is which unmistakable.
 
+## `GET /api/approvals`
+
+The approval inbox: every call whose `policy.decision` resolved to `hold`, and
+what the record says has happened to it since. Derived from the ledger on the
+request, like everything else here.
+
+```json
+{
+  "holds": [
+    {
+      "call_hash": "sha256:2508e913...",
+      "rule": "r-publish",
+      "message": "This call gates pre at rung led for effect irreversible and needs an approval event before it can proceed. ...",
+      "capability": "vcs.publish",
+      "tool": "Bash",
+      "target": "git push origin main",
+      "held": 2,
+      "first_held_at": "2026-08-05T13:28:49.809Z",
+      "last_held_at": "2026-08-05T13:31:02.114Z",
+      "request_id": "run-1785936529805-req-3",
+      "run_id": "run-1785936529805",
+      "decision_event": "run-1785936529805-4",
+      "state": "waiting",
+      "releases_next_call": false,
+      "approve_command": "gantry approve /path/to/ledger run-1785936529805-req-3 <approver>",
+      "grants": [
+        {
+          "grant_id": "run-1785936547330-0",
+          "verdict": "deny",
+          "approver": "user:mariano@local",
+          "ts": "2026-08-05T13:29:07.330Z",
+          "event_id": "run-1785936547330-0",
+          "request_id": "run-1785936530058-req-3",
+          "permitted": true,
+          "spent": false,
+          "spent_at": null
+        }
+      ]
+    }
+  ],
+  "blocked": 2,
+  "released": 1,
+  "approvers": "any",
+  "ledger": "/path/to/ledger"
+}
+```
+
+The row is one held call, not one held request. A grant binds to the call hash
+rather than the request id, because the retry that consumes it is a new run
+with a new request id (`docs/proof/14.md`), so repeated holds of the same call
+under the same rule are one row with `held` counting them. `request_id` is the
+most recent, which is the one an approver is answering, and it is what
+`approve_command` names.
+
+`releases_next_call` is the broker's own predicate, re-derived: an `approve`
+grant, under an approver `trust_budget.promotion.approver` permits, that no
+`approval.use` has spent. A console that showed a grant as releasing a call the
+broker would still hold would be worse than showing nothing.
+
+`state` is one of:
+
+- `waiting`: no approval event names this call and rule. Nobody looked.
+- `refused`: the most recent approval carries `verdict: deny`. Somebody looked
+  and said no. This is not the same state as `waiting` and the front end must
+  not render it as one, because that distinction is the whole reason a refusal
+  is an event.
+- `released`: a usable grant is on the ledger. The next identical call runs and
+  spends it.
+- `spent`: every approve grant for this call has been spent by an
+  `approval.use`, and the call has been held again since. A single use grant
+  rendered as still usable would be the worst row on the page.
+- `ineffective`: an approve grant exists under an approver the trust budget
+  does not permit, so the broker will not release the call. Reachable only on a
+  profile whose approver is `named`.
+
+`approvers` is `"any"` or the list from
+`trust_budget.promotion.named_approvers`. Where it is `"any"` the console
+cannot know who is at the terminal, so `approve_command` carries the
+`<approver>` placeholder and the view says to replace it; where approvers are
+named, the command names one.
+
+**This route is read-only, and the front end must not grow a button that
+resolves a hold.** It prints the command; a human runs it at a terminal under
+their own identity. An approval written by a click on a loopback port would put
+a name on the ledger that nothing stands behind, which is a different claim
+from the one the approval path makes. The rule at the top of this file applies
+here with no exception.
+
 ## `GET /api/verify`
 
 A full verification on the request. This is the expensive route; the front end
@@ -265,3 +353,12 @@ that checks the server.
 - Show a healthy page over a ledger whose `/api/verify` returned `ok: false`.
   A verification failure takes over the UI; it is not a badge in a corner.
 - Claim to have verified anything. It reports.
+- Show a page of a set the API truncated without saying so. `/api/events`
+  returns at most 1000 rows and reports `total`; a view that draws the page and
+  not the number is a complete-looking rendering of an incomplete read. The
+  page is the oldest matching events, not the newest, because limit and offset
+  run over the log in append order, and a view that says "most recent" is
+  describing a page nobody is looking at.
+- Offer to approve, promote or append. `/api/approvals` names what is waiting
+  and prints the command; the console has no identity story and a button here
+  would put a name on the record that nothing stands behind.

@@ -5,6 +5,8 @@ real API exists.
     python3 dev/serve.py                 # healthy fixtures on 8787
     python3 dev/serve.py tampered        # a ledger whose /api/verify says ok: false
     python3 dev/serve.py healthy 9000
+    python3 dev/serve.py healthy grow    # a ledger that grows on every read,
+                                         # so the live poll always repaints
 
 This is developer tooling. It is never embedded in the binary and the Rust
 build does not read it. It exists because two things in the console cannot be
@@ -27,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 ASSETS = os.path.join(ROOT, "assets")
 
-ROUTES = {"score", "head", "events", "runs", "policy", "trust", "verify"}
+ROUTES = {"score", "head", "events", "runs", "policy", "trust", "approvals", "verify"}
 
 # Two console states need a click to reach, which a headless screenshot cannot
 # do: the failure banner that follows dismissing the takeover, and the light
@@ -51,6 +53,14 @@ def fault(cause, fix):
 
 class Handler(SimpleHTTPRequestHandler):
     fixtures = os.path.join(HERE, "fixtures", "healthy")
+    # A third thing a headless dump cannot reach: what the live poll does to a
+    # row the reader has open. The poll only repaints when the event set has
+    # changed, and timing a real append against a page running on a virtual
+    # clock is a race. Under `grow`, every /api/events answer carries one more
+    # synthetic event than the last, so the first poll always repaints and the
+    # question becomes deterministic.
+    grow = False
+    growth = 0
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ASSETS, **kw)
@@ -122,8 +132,21 @@ class Handler(SimpleHTTPRequestHandler):
             404,
         )
 
+    def grown(self, evs):
+        """One more event than the previous answer, so a poll sees a change."""
+        Handler.growth += 1
+        last = evs[-1]
+        for n in range(Handler.growth):
+            e = json.loads(json.dumps(last))
+            e["id"] = f"{last['id']}-grown-{n}"
+            e["seq"] = last["seq"] + 1 + n
+            evs = evs + [e]
+        return evs
+
     def events(self, q):
         evs = self.load("events")["events"]
+        if Handler.grow:
+            evs = self.grown(evs)
         kinds = q.get("kind")
         if kinds:
             evs = [e for e in evs if e["kind"] in kinds]
@@ -150,6 +173,8 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     args = [a for a in sys.argv[1:]]
+    Handler.grow = "grow" in args
+    args = [a for a in args if a != "grow"]
     which = args[0] if args and not args[0].isdigit() else "healthy"
     port = int(args[-1]) if args and args[-1].isdigit() else 8787
     Handler.fixtures = os.path.join(HERE, "fixtures", which)

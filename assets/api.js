@@ -73,6 +73,7 @@ export const api = {
   runs: () => get('/api/runs'),
   policy: () => get('/api/policy'),
   trust: () => get('/api/trust'),
+  approvals: () => get('/api/approvals'),
   verify: () => get('/api/verify'),
 };
 

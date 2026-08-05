@@ -743,6 +743,20 @@ pre.json {
 .errbox .fix { margin-top: 6px; font-size: var(--fs-sm); }
 .errbox .fix b { color: var(--fg); }
 
+/* Same shape as errbox, for a page that is incomplete rather than broken:
+   a truncated run is not a fault, it is a partial record saying so. */
+.warnbox {
+  border: 1px solid var(--unattested);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--unattested-bg);
+  padding: 10px 12px;
+  margin: 10px;
+}
+.warnbox h3 { margin: 0 0 4px; font-size: var(--fs); color: var(--unattested); }
+.warnbox .fix { margin-top: 6px; font-size: var(--fs-sm); }
+.warnbox .fix b { color: var(--fg); }
+
 /* ---------- footer ---------- */
 
 .keyhints {
