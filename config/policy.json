@@ -28,7 +28,7 @@
       "observed_by": "gateway.instruction_hash"
     },
     "host_permissions": {
-      "declared": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+      "declared": "sha256:5a22b9dde36481e31c8adb73457aeda17f2b09c4dc7d095f59be9e6373686fa5",
       "observed_by": "hook.settings_hash"
     },
     "attestation": {

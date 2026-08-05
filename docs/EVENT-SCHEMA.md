@@ -126,7 +126,7 @@ Defined here because a stranger cannot verify what is not written down
 
 | Kind | Primitive | Subject carries |
 |---|---|---|
-| `run.open` | 06 · 11 | Profile, workload id, resolved instruction pack, settings hash, restored checkpoint id. |
+| `run.open` | 06 · 11 | Profile, workload id, resolved instruction pack, settings hash, restored checkpoint id, and `unavailable`, the profile requirements this machine could not provide (empty when it provided them all, and never absent, because a missing list and a satisfied one would read alike). |
 | `run.seal` | 11 | Outcome, event count, signed tree head at seal, cost total. |
 | `model.call` | 02 · 03 · 11 | Provider, model, declared inputs and whether each arrived, window budget and actual, token counts, cost, latency, prompt hash. Never the raw prompt in `laptop`+ profiles where retention says otherwise: hash and store separately. |
 | `tool.request` | 04 · 05 | Tool id, schema version, canonical args, sandbox kind, egress allowlist hash, credential handles requested. Emitted when the call is issued, so a call that blocks, hangs or dies is on the record while it is still outstanding (finding e/1). |

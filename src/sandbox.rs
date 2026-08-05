@@ -45,7 +45,6 @@ pub struct Sandbox {
     kind: &'static str,
 }
 
-
 impl Sandbox {
     /// Builds the per-run sandbox. `egress_allow` comes from
     /// `profile_requirements.egress.allow`; each entry is `ip:port` in

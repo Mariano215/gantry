@@ -112,11 +112,14 @@ else
   drift_status=$?
 fi
 # Exit status first, then the text. A command that prints a report and then
-# dies would otherwise pass a check that reads only what it printed. 1 is the
-# documented status for "a field diverged"; anything above it is a failure to
-# run at all.
-if [ "$drift_status" -gt 1 ]; then
-  echo "gantry drift did not run against the tracked policy (exit $drift_status): $drift_out. Fix: run cargo run -- drift /tmp/drift-led config/policy.json by hand and work through the first failure it names"
+# dies would otherwise pass a check that reads only what it printed. The
+# tracked policy has to come back clean, not merely run: this block first
+# tolerated a divergence (exit 1) and proved the clean path against a corrected
+# scratch copy instead, which left the gate green while config/policy.json
+# declared a host permission hash .claude/settings.json had stopped having.
+# A drift check that passes on the state it exists to catch is a dead sensor.
+if [ "$drift_status" != 0 ]; then
+  echo "gantry drift found the tracked policy out of step with this machine (exit $drift_status): $drift_out. Fix: the divergence line above names the field, both values and the change to make; correct config/policy.json or put the running system back"
   exit 1
 fi
 for field in ${(f)"$(jq -r '.profile_requirements | keys[]' config/policy.json)"}; do
@@ -172,18 +175,11 @@ case "$red" in
     exit 1
     ;;
 esac
-settings_hash="sha256:$(shasum -a 256 .claude/settings.json | cut -d' ' -f1)"
-jq --arg h "$settings_hash" '.profile_requirements.host_permissions.declared = $h' config/policy.json > "$drift_root/config/policy.json"
-if clean=$(cargo run --quiet -- drift "$drift_root/clean" "$drift_root/config/policy.json"); then
-  clean_status=0
-else
-  clean_status=$?
-fi
+# The clean path is the tracked run above and not a scratch copy. A control
+# that rewrote the declared hash from the running system before comparing them
+# would agree with itself on every push, which is the same mistake the egress
+# row is reported unobservable for.
 rm -rf "$drift_root"
-if [ "$clean_status" != 0 ]; then
-  echo "a policy whose declared values match the running system still reported drift (exit $clean_status): $clean. Fix: the divergence line above names the field, both values and the change to make; config/policy.json declares something the running system no longer has"
-  exit 1
-fi
 echo "drift walked $(jq -r '.profile_requirements | keys | length' config/policy.json) field(s), reported every unreadable source as a gap, and both controls fired: ${drift_out##*$'\n'}"
 
 echo "== tracked template validates whole (a broken bundle refuses) =="

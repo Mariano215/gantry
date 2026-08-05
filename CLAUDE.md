@@ -14,8 +14,11 @@ maturity 3. This file is a guide. Every rule below therefore names what
 enforces it. A rule added here without an enforcing check is a defect in this
 file, not a standard.
 
-Rules with no enforcement yet are marked `[UNENFORCED]`. That marker is a
-work item, and `gantry scan` on this repo is expected to report it.
+A rule with no enforcement yet carries the unenforced marker followed by the
+check id that would close it, both on one line. The marker is a work item, and
+`gantry scan` on this repo reports every one it finds. This paragraph names no
+marker of its own, because a definition that quoted the token would be
+indistinguishable from a use and the count would be wrong by one.
 
 ## Architecture invariants
 
@@ -155,8 +158,8 @@ work item, and `gantry scan` on this repo is expected to report it.
   `ci/run.sh` and `.github/workflows/ci.yml`. What a sensor's `placement`
   declares is still not honoured: the value is recorded on every verdict and
   nothing dispatches on it, so `pre_integration` and `post_integration` are
-  descriptions rather than schedule. `[UNENFORCED]`
-  `ci/sensor-placement-honoured`. This marker was carried by
+  descriptions rather than schedule.
+  `[UNENFORCED]` `ci/sensor-placement-honoured`. This marker was carried by
   `docs/proof/05.md` and had gone missing from this file, which is the defect
   this file's own opening paragraph describes
 - **An attestation is verified or declared unverified, never assumed.** The
@@ -246,6 +249,122 @@ work item, and `gantry scan` on this repo is expected to report it.
   enforced by `ci/console-render.sh`, run by `ci/run.sh` on every push; proved
   able to fail by renaming `fired`, `earned_rung`, `_attestation_state` and
   `_attestation_trust` in turn, and recorded in `docs/proof/11.md`
+- **A declared value is observed or the gap is reported, never assumed.**
+  `gantry drift` walks `profile_requirements`, reads each `observed_by`
+  source from the running system and appends one `drift.report` per field on
+  every run, matches included, so a silent scan and a stopped scan are
+  different states on the ledger. A source this build cannot read reports
+  `unobservable` and never `match`: the seatbelt egress allowlist is
+  generated from the policy's own `egress.allow`, so reading it back would
+  compare the declaration with itself and agree on every run while the host
+  route table permitted the world, and there is no network namespace here to
+  read `netns.route_table` out of. Both are reported as gaps, as is a source
+  no code reads, which is a gap in one field rather than an aborted walk. A
+  divergence names both values and the fix, exits 1, and lands in the run's
+  own `authority.diverged`; the `authority.declared: false` the policy schema
+  asked for was v1's name for that list and is not reintroduced. The first
+  run against the tracked policy found a divergence nothing had reported:
+  `config/policy.json` declared a host permission hash `.claude/settings.json`
+  had stopped having, and the declared value simply had no reader. It was
+  corrected at merge, and the check now requires the tracked policy to come
+  back clean rather than tolerating a divergence, because a drift check that
+  passes on the state it exists to catch is a dead sensor. Enforced since
+  slice 15 by `src/drift.rs` (`walk`, `read`) and `ci/run.sh`
+  (`ci/drift-honest`), which fails if a field whose source nothing reads is
+  reported as anything but a gap and if the tracked policy declares a value
+  the running system does not have; exercised by `tests/drift.rs`
+  (`a_source_this_build_cannot_read_is_unobservable_never_a_match`,
+  `the_generated_allowlist_is_not_an_observation_of_itself`,
+  `an_unreadable_source_does_not_stop_the_walk`,
+  `every_field_reports_every_run_and_the_ledger_verifies`,
+  `a_divergent_field_lands_in_authority_diverged_and_the_exit_status_is_one`)
+  and proved able to fail in `docs/proof/15.md`. Four of the nine profile
+  requirements are still carried by the document alone, and the report says
+  which four rather than passing them quietly.
+  `[UNENFORCED]` `ci/egress-allowlist-observed`
+- **A profile declares what the machine must provide, and a machine that
+  cannot provide it says so.** Every `profile_requirements` field with an
+  availability question (isolation backend, identity source, ledger anchoring,
+  key custody) is checked at run open against what the running system can
+  provide. Under `on_unavailable: refuse` an unavailable requirement refuses
+  the run before a single event is appended, with a fault naming the field, the
+  declared value, what this system provides instead and the action to take, so
+  a `regulated` profile cannot quietly become a `laptop` on a machine with no
+  HSM. Under `degrade` (the laptop default) the run starts and the shortfall is
+  written to `run.open` as `unavailable`, never swallowed. A stance that is
+  neither refuses on every run, because a typo falling through to degrade is
+  the silent degradation this field exists to rule out. Availability is not
+  divergence: `availability_check` takes the observed values as arguments and
+  reads no system state, so it cannot become a second observer, and a host that
+  can provide microvm answers yes for microvm even while a run sits inside
+  seatbelt. Enforced by `src/policy.rs` (`availability_check`), its callers
+  in `BrokerRun::open` and `GatewayRun::open`, `tests/profiles.rs`
+  (`a_regulated_profile_refuses_to_start_and_names_the_unavailable_requirements`,
+  `the_same_profile_under_degrade_starts_and_records_the_shortfall`,
+  `the_gateway_refuses_the_same_profile`,
+  `an_unrecognised_stance_refuses_rather_than_degrading`) and `ci/run.sh`
+  (`ci/profile-unavailable-refuses`), which builds a regulated harness on every
+  push and fails if it starts; recorded in `docs/proof/17.md`
+- **A score names a path, or it names the paths it looked in.** `gantry scan
+  <repo-dir>` reads a repository's harness surface and scores the twelve
+  primitives from what is on disk. Every number carries evidence: the artifact
+  found and the check file that names it, or an explicit list of every path
+  looked in that came back empty. A number with no path is an opinion, which is
+  what `docs/PRIMITIVES.md` refuses. The scan writes nothing to the repository
+  it reads, and that is structural rather than intended: every filesystem call
+  in `src/scan.rs` goes through `RepoRead`, which has no write, create, rename
+  or remove, and it appends no ledger event. A static read caps at 3, absent
+  (0), an artifact nothing enforces (2), an artifact a check file names (3),
+  because a file says a check is wired and only a run says it fired and could
+  have failed; 4 and above needs telemetry, which is what `src/scorer.rs` reads
+  off a ledger. On this repository the scan lands at or below the telemetry
+  score on all twelve primitives, overall 0 against telemetry's 3, and it
+  reports the unenforced markers this file carries, which is what the
+  paragraph at the top of this file promises and what nothing did for sixteen
+  slices. Enforced by `ci/run.sh` (`ci/scan-evidence`, which fails on a score
+  with no evidence behind it, a score outside 0 to 3, a primitive count other
+  than twelve, a static overall above the ceiling, or a scan that cannot run)
+  and `tests/scan.rs`
+  (`an_empty_repository_scores_zero_and_says_where_it_looked`,
+  `a_scan_never_writes_to_the_target`,
+  `the_scanner_holds_no_write_capable_filesystem_call`,
+  `an_artifact_scores_two_and_a_check_naming_it_scores_three`,
+  `scanning_this_repository_stays_under_its_own_ceiling_and_reports_its_markers`);
+  recorded in `docs/proof/16.md`
+- **A hole in the record is reported, and a rewrite is caught by a copy or not
+  at all.** `gantry ledger verify` reports every gap in a run's `seq`, naming
+  the run, the last seq before the hole, the next one after it and how many are
+  missing. A gap is a finding and never a fault: a removed entry already faults
+  on the chain or a signed head, so a hole in `seq` is an event that was never
+  appended, and the log cannot tell a harness killed mid-run from a producer
+  that numbered an event it failed to write. Calling that an alteration would
+  assert a distinction the record cannot make. Since slice 18 a consistency
+  proof is also checkable by whoever is handed one: `gantry ledger consistency`
+  emits both signed heads with the proof between them, because a bare hash
+  array is not checkable by anybody, and `gantry ledger verify-consistency
+  <bundle.json> <pubkey-file>` checks it offline the way `verify-inclusion`
+  does, refusing an old head no key signed before any Merkle arithmetic.
+  Neither closes the hole a transparency log has with no head gossip, which is
+  why `gantry ledger anchor` writes the current signed head outside the ledger
+  directory and records a `ledger.anchor` naming the destination, the tree
+  size, the head and the time, with `proves` and `does_not_prove` in the
+  payload; the destination is refused inside the ledger and refused when a file
+  already sits there, because overwriting the older copy destroys the only
+  thing an anchor is. `gantry ledger verify-anchor` folds the anchored root
+  through a fresh consistency proof, so a writer who drops its own tail and
+  re-signs is caught by a log that still verifies clean, and only by a party
+  holding the copy. Enforced by `src/ledger.rs` (`seq_gaps`, `Ledger::anchor`,
+  `verify_consistency_bundle`), `tests/ledger.rs`
+  (`a_seq_gap_is_reported_per_run_and_is_not_a_fault`,
+  `a_consistency_bundle_verifies_offline_and_a_rewrite_is_rejected`,
+  `an_anchored_head_detects_a_rewrite_verification_alone_misses`,
+  `anchoring_refuses_a_destination_inside_the_ledger_and_refuses_to_overwrite`)
+  and `ci/run.sh` (`ci/ledger-seq-gap`, `ci/ledger-verify-consistency`,
+  `ci/ledger-anchor`), proved able to fail by widening the gap test and by
+  folding the log's own head instead of the anchored one, which prints
+  `anchor verified` on a rewritten log. Recorded in `docs/proof/18.md`.
+  Nothing dispatches on the profile's declared anchoring kind and nothing
+  schedules an anchor. `[UNENFORCED]` `ci/anchor-schedule`
 
 ## Code standards
 

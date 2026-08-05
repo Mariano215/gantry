@@ -358,16 +358,24 @@ fn enforcing<'a>(
     None
 }
 
-/// The first backticked token in a fragment, when it looks like a check id: no
+/// The first backticked token in a fragment that looks like a check id: no
 /// whitespace, and a separator in it. `ci/sensor-placement-honoured` qualifies,
-/// a prose phrase does not.
+/// a prose phrase does not. Odd segments of a backtick split are the quoted
+/// ones, and the caller strips the marker's own closing backtick first so that
+/// parity is real. Taking only the first pair read the gap between the
+/// marker's backtick and the id's as the token, found it empty, and fell
+/// through to the next line, which is how a marker naming its check on its own
+/// line was reported as naming none.
 fn check_id(fragment: &str) -> Option<String> {
-    let (_, rest) = fragment.split_once('`')?;
-    let (token, _) = rest.split_once('`')?;
-    let token = token.trim();
-    let looks_like_an_id =
-        !token.is_empty() && !token.contains(char::is_whitespace) && token.contains(['/', '-']);
-    looks_like_an_id.then(|| token.to_string())
+    fragment
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::trim)
+        .find(|token| {
+            !token.is_empty() && !token.contains(char::is_whitespace) && token.contains(['/', '-'])
+        })
+        .map(str::to_string)
 }
 
 fn markers(repo: &RepoRead) -> Vec<Marker> {
@@ -381,8 +389,14 @@ fn markers(repo: &RepoRead) -> Vec<Marker> {
             let Some((_, after)) = line.split_once("[UNENFORCED]") else {
                 continue;
             };
+            // The marker is usually backticked in a rule file, which leaves its
+            // own closing backtick at the head of the fragment. Strip it, or
+            // every quoted token after it reads on the wrong parity.
+            let after = after.trim_start_matches('`');
             // The check id is on the marker's own line, or wraps onto the next
-            // one, which is how CLAUDE.md's own marker is written today.
+            // one. Same line wins: a wrapped fallback that fired while the id
+            // sat on the marker's own line reported the next path in the
+            // paragraph as the check that would close the rule.
             let check = check_id(after).or_else(|| lines.get(i + 1).and_then(|n| check_id(n)));
             out.push(Marker {
                 file: (*file).to_string(),
@@ -514,6 +528,19 @@ mod tests {
         // that names a check.
         assert_eq!(check_id("and `gantry scan` reports it"), None);
         assert_eq!(check_id("no backticks here"), None);
+        // The shape a rule file actually writes: the marker is itself
+        // backticked, so the fragment after it opens with a stray closing
+        // backtick that markers() strips. The id has to survive both the
+        // stripping and the prose that follows it on the same line, because
+        // reading past it lands on the next path in the paragraph.
+        assert_eq!(
+            check_id(" `ci/anchor-schedule`"),
+            Some("ci/anchor-schedule".to_string())
+        );
+        assert_eq!(
+            check_id(" `ci/sensor-placement-honoured`. This marker was carried by"),
+            Some("ci/sensor-placement-honoured".to_string())
+        );
     }
 
     #[test]

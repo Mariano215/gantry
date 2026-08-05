@@ -133,8 +133,22 @@ one with `gantry ledger prove <dir> <index>`, check it with
 1.7 KB and the check needs no server and no network.
 
 **Consistency proof.** The hashes that prove an older signed head is a prefix
-of a newer tree, so history was appended to and not rewritten. Produced by
-`gantry ledger consistency <dir> <m>`.
+of a newer tree, so history was appended to and not rewritten. Produce one with
+`gantry ledger consistency <dir> <m>`, which emits both signed heads and the
+proof between them, and check it with `gantry ledger verify-consistency
+<bundle.json> <pubkey>`. The old head is in the bundle as a head rather than a
+bare root because a root a stranger typed in proves nothing about what the log
+published; its signature is checked first.
+
+**Anchor.** A copy of a signed tree head kept somewhere the log's writer is
+not. `gantry ledger anchor <dir> <file>` writes one outside the ledger
+directory and records a `ledger.anchor` naming the destination, the tree size,
+the head and the time; `gantry ledger verify-anchor <dir> <file>` folds the
+anchored root through a fresh consistency proof. It catches the one rewrite
+verification alone cannot see, a writer that drops its own tail and re-signs,
+and it catches it only for whoever holds the copy. An anchor is worth exactly
+the independence of where it was put, which is why the command refuses a
+destination inside the ledger and refuses to overwrite an older one.
 
 **Attestation.** An optional ed25519 signature by the actor that produced the
 event, over the fields the actor controls (`Envelope::attestation_bytes`). It
@@ -326,9 +340,15 @@ from the git HEAD blob) and `host_permissions.permission_mode` (the observed
 mode differs from `permissions.defaultMode`). The two are independent and are
 listed separately.
 
-**Drift.** The general name for the same idea across all declared values in
-`profile_requirements`. Divergence in the two fields above runs. The scheduled
-whole-profile drift scan does not; see the last section.
+**Drift.** The comparison of every declared profile requirement against the
+running system. `gantry drift <ledger> <policy.json>` walks
+`profile_requirements`, reads each `observed_by` source and appends one
+`drift.report` per field, matches included, so silence is evidence rather than
+absence. Three outcomes: `match`, `divergence` (both values and the fix, exit
+1, and the field lands in the run's own `authority.diverged`), and
+`unobservable`, which is what a source nothing can read reports. A match it
+could not have observed is the failure this check exists to prevent, and
+`ci/run.sh` fails on one. `src/drift.rs`.
 
 ---
 
@@ -528,34 +548,52 @@ Terms you will meet in `docs/`, in `CLAUDE.md` or in the policy schema that no
 code implements today. They are listed because a term that reads as a running
 control and is not is worse than a missing one.
 
-**`drift.report` and `gantry drift`.** `docs/POLICY-SCHEMA.md` describes a
-command that walks `profile_requirements`, reads each `observed_by` source and
-emits one report per field on a schedule. There is no such subcommand and
-nothing emits the event kind. What runs is the per-event `authority.diverged`
-list, covering the settings hash and the permission mode.
+**`observed_by` for the egress allowlist.** Every profile requirement names an
+observation source and `gantry drift` reads them, but the egress row's source
+is not an observation in either of its declared forms. `netns.route_table`
+(the schema) needs a network namespace this host does not have, and
+`sandbox.egress_allow` (`config/policy.json`) is the seatbelt allowlist, which
+is generated from the policy's own `egress.allow`, so reading it back compares
+the declaration with itself. Both report `unobservable`. The egress claim is
+carried by the policy document alone, and the scan says so on every run.
 
-**`observed_by`.** Every profile requirement names an observation source.
-Three are read today. The settings hash and the permission mode are compared
-against their declarations, and a mismatch lands in `authority.diverged`. The
-sandbox backend is recorded beside the declared isolation on every `run.open`,
-so a reader can compare the two, but nothing computes the comparison. The rest
-are declarations waiting for the drift scan.
+**The rows beside a compared value.** `gantry drift` compares one value per
+field. `egress.allow`, `ledger.anchoring`, `ledger.key_custody` and
+`identity.fallback_permitted` sit next to compared values and nothing reads
+them. `ledger: match` means a signed head exists, not that anchoring is `none`
+because nothing anchors.
 
-**`ledger.anchor` and anchoring.** The event kind is in the schema and
-`profile_requirements.ledger.anchoring` is in the policy. Nothing anchors a
-head anywhere. Until it does, replacing the whole log with an internally
-consistent older state is undetectable by verification alone, which is the
-known limit of any transparency log with no head gossip.
+**A drift schedule inside the binary.** `docs/POLICY-SCHEMA.md` says the walk
+runs on a schedule. The schedule is CI: `ci/run.sh` on every push and the
+weekly cron in `.github/workflows/ci.yml`. A harness installed from the
+template gets the subcommand and no schedule of its own.
+
+**Anchoring kinds and schedule.** `gantry ledger anchor` writes a file copy of
+the signed head and `gantry ledger verify-anchor` checks the log against it, so
+the `ledger.anchor` kind is emitted by something. What stays declared is the
+rest: `profile_requirements.ledger.anchoring` names `object_store`, `rfc3161`
+and `notary`, and nothing dispatches on the value, so a profile demanding an
+RFC 3161 timestamp gets a file copy and no refusal. Nothing schedules an anchor
+either, and an anchor nobody takes is the same as no anchor. The command can
+refuse the ledger directory and refuse to overwrite; it cannot tell a WORM
+mount from a sibling directory on the same disk.
 
 **`team` and `regulated` profiles.** Named in `README.md`,
-`docs/CONCEPT.md` and `docs/POLICY-SCHEMA.md` with their own isolation,
-identity and anchoring rows. The only profile-sensitive behaviour in the code
-is the refusal to start a non-laptop profile that declares a published signing
-seed. `on_unavailable: refuse` is not implemented, and neither is any isolation
-backend other than seatbelt.
+`docs/CONCEPT.md` and `docs/POLICY-SCHEMA.md`. Two profile-sensitive
+behaviours run. A non-laptop profile that declares a published signing seed
+refuses to start, and `on_unavailable: refuse` refuses any profile declaring a
+requirement this build cannot provide (`policy::availability_check`,
+`tests/profiles.rs`, `ci/profile-unavailable-refuses`). Since no isolation
+backend other than seatbelt exists, and neither does OIDC, anchoring nor an
+HSM, a `regulated` profile written the way `docs/POLICY-SCHEMA.md` describes
+it does not start on this machine, which is the intended result rather than a
+gap. Under `degrade` it starts and the shortfall is on `run.open` as
+`unavailable`.
 
-**OIDC identity.** The identity source on every event is `local`. OIDC appears
-in the profile table and in `docs/CONCEPT.md` and has no implementation.
+**OIDC identity.** The identity source on every event is `local`, and no code
+path produces another. A profile declaring `oidc` is refused at run open under
+`on_unavailable: refuse` and recorded as a shortfall under `degrade`. Nothing
+else about it runs.
 
 **Rollback execution.** A rollback handle is a declared string the loader
 checks. No code performs a rollback.
@@ -574,21 +612,22 @@ not the transport.
 
 **Taint propagation.** Recorded, not propagated. See the taint entry above.
 
-**`seq` gap reporting.** The schema says a gap in `seq` is the signal that a
-harness was switched off mid-run. The verifier does not report gaps.
-
-**Consistency proof verification from the CLI.** `gantry ledger consistency`
-produces a proof. Checking one is a library function and a property test; there
-is no `verify-consistency` subcommand the way there is for inclusion.
-
 **Retention rules.** `gantry ledger expire` records an expiry you hand it. The
 retention rule id is a field the caller writes. There is no scheduler and no
 rule engine deciding what expires when.
 
-**`gantry scan`, `gantry apply`, `gantry up`.** Named in
-`docs/CLAUDE-CODE-INTEGRATION.md` as the onboarding path, and `gantry scan`
-is referenced by `CLAUDE.md`. None is a subcommand. `gantry` with no arguments
-lists what does exist.
+**`gantry apply` and `gantry up`.** Named in
+`docs/CLAUDE-CODE-INTEGRATION.md` as the rest of the onboarding path. Neither
+is a subcommand. `apply` would scaffold missing layers as a reviewable diff,
+ranked by the rubric's remediation order; `up` would bring ledger, broker and
+sandbox up together on the `laptop` profile. The pieces run today as separate
+commands and nothing composes them. `gantry scan` has left this list: since
+slice 16 it reads a repository, scores the twelve primitives with a path behind
+every number or an explicit "looked in X, found nothing", reports the
+unenforced markers in the scanned repository's rule file, and writes
+nothing to the tree it reads. Its ceiling is 3, because a file shows a control
+present and only telemetry shows it running, so it does not replace
+`gantry score`. See `docs/proof/16.md`.
 
 **Two policy version schemes.** The broker pins the computed content version of
 `config/policy.json`. The gateway smoke command `gantry run` still pins the
