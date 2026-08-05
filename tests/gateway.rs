@@ -113,6 +113,17 @@ fn read_subject(led: &Path, line: usize) -> serde_json::Value {
     serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{hex_part}.json"))).unwrap()).unwrap()
 }
 
+fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files_under(&path, out);
+        } else {
+            out.push(path);
+        }
+    }
+}
+
 #[test]
 fn call_appends_model_call_event() {
     let dir = workdir("call-ok");
@@ -189,16 +200,6 @@ fn provider_error_never_leaks_the_key_onto_the_ledger() {
     assert_eq!(subject["outcome"], "error");
 
     // Every file the run touched (events, heads, payloads) must be sentinel-free.
-    fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                files_under(&path, out);
-            } else {
-                out.push(path);
-            }
-        }
-    }
     let mut files = Vec::new();
     files_under(&led, &mut files);
     assert!(!files.is_empty());
@@ -280,17 +281,8 @@ fn key_bytes_never_reach_the_ledger() {
     run.seal("complete").unwrap();
     let req = String::from_utf8(srv.join().unwrap()).unwrap();
     assert!(req.contains(&format!("Bearer {canary}")), "wire contains Bearer token");
+    std::env::remove_var("GANTRY_TEST_CANARY_KEY");
 
-    fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                files_under(&path, out);
-            } else {
-                out.push(path);
-            }
-        }
-    }
     let mut files = Vec::new();
     files_under(&led, &mut files);
     assert!(!files.is_empty());
