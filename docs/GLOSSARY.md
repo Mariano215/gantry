@@ -585,11 +585,6 @@ is no `verify-consistency` subcommand the way there is for inclusion.
 retention rule id is a field the caller writes. There is no scheduler and no
 rule engine deciding what expires when.
 
-**Demotion triggers other than a sensor failure.** The trust budget lists
-`human.override` and `policy.deny`. Only a `capability.run` recorded by the
-orchestrator with a non-clean outcome moves a rung down; a broker denial does
-not.
-
 **`gantry scan`, `gantry apply`, `gantry up`.** Named in
 `docs/CLAUDE-CODE-INTEGRATION.md` as the onboarding path, and `gantry scan`
 is referenced by `CLAUDE.md`. None is a subcommand. `gantry` with no arguments

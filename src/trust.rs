@@ -55,13 +55,7 @@ impl TrustBudget {
                     .filter_map(|v| v.as_str().map(String::from))
                     .collect()
             })
-            .unwrap_or_else(|| {
-                vec![
-                    "sensor.fail".to_string(),
-                    "human.override".to_string(),
-                    "policy.deny".to_string(),
-                ]
-            });
+            .unwrap_or_else(|| vec!["sensor.fail".to_string(), "policy.deny".to_string()]);
         TrustBudget {
             runs_at_rung,
             approver,

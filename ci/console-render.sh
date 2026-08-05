@@ -234,7 +234,10 @@ expect policy "$NEVER never fired" "the firing counts the policy route joins off
 # Trust: /api/trust, the rung replayed rather than read from config.
 expect trust "repo.write" "the trust table lists the capability the orchestrator stepped"
 expect trust "assisted" "the declared and earned rungs both render"
-expect trust "every capability sits at its declared rung" "declared and earned are compared on screen, so both fields arrived"
+# This fixture makes a denied call, and a denial costs the capability a rung,
+# so declared and earned differ here. That is the stronger assertion: the page
+# can only say this if both fields arrived and were compared.
+expect trust "the broker gates on the earned rung" "declared and earned are compared on screen, and the denial in this fixture moved one of them"
 
 # Verify: /api/verify, and the offline command the console must print verbatim.
 expect verify "gantry ledger verify" "the reproduce command is printed verbatim, not paraphrased"

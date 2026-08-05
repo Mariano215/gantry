@@ -116,7 +116,19 @@ work item, and `gantry scan` on this repo is expected to report it.
   tightens the gate on the very next call; an earned promotion whose gate
   would become post without a declared rollback degrades to pre instead. —
   enforced by `tests/broker.rs`
-  (`broker_gates_on_the_earned_rung_not_the_declared_one`)
+  (`broker_gates_on_the_earned_rung_not_the_declared_one`). A denial costs a
+  rung too, so autonomy comes down on bad behaviour and not only on a failed
+  sensor: the broker writes a `rung.change` naming the rule that caused it
+  whenever a decision denies a call and the trust budget lists `policy.deny`.
+  Autonomy that only ever goes up is granted once and defended by nothing.
+  `led` is the floor, and a denial naming no capability demotes nothing. The
+  trust budget lists only triggers that run: `human.override` was declared
+  for nine slices with no command able to produce one and has been removed
+  rather than left as a promise, along with `promotion.zero_human_overrides`.
+  — enforced by `tests/broker.rs`
+  (`a_denial_narrows_the_capabilitys_autonomy`, `demotion_stops_at_the_floor`,
+  `the_demotion_follows_the_capability_the_decision_named`,
+  `the_rung_a_denial_cost_gates_the_next_call`)
 - **A sensor that cannot fail is broken, not clean, and neither is one that
   fires on everything.** Every sensor declares a negative control per branch
   of its check, content it must reject, and may declare positive controls,

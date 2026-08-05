@@ -419,6 +419,7 @@ impl BrokerRun {
         self.core.append("policy.decision", decision_subject)?;
         match verdict {
             Action::Deny => {
+                self.demote_on_denial(&history, decision.capability.as_deref(), &rule)?;
                 self.emit_result(&request_id, "denied", None, false, 0, message.as_deref())?;
                 Err(Fault::new(
                     format!(
@@ -482,6 +483,64 @@ impl BrokerRun {
                 self.execute_allowed(&decision, &request_id, tool, target)
             }
         }
+    }
+
+    /// A denial narrows the capability's autonomy, when the trust budget says
+    /// `policy.deny` is a demotion trigger.
+    ///
+    /// This is the point of an earned rung. Autonomy that only ever goes up on
+    /// good behaviour and never comes down on bad behaviour is not earned, it
+    /// is granted once and defended by nothing. Before this, a capability
+    /// could be denied repeatedly and keep its rung as long as its sensors
+    /// passed, while `config/policy.json` listed `policy.deny` as a trigger
+    /// and nothing read it.
+    ///
+    /// The demotion is a `rung.change` event rather than a number computed at
+    /// read time, so the rung stays derived from the record and a third party
+    /// replaying the ledger reaches the same answer. `led` is the floor;
+    /// further denials there change nothing, because there is no rung below
+    /// the one where a human already drives.
+    ///
+    /// A denial that names no capability (`r-default`, where nothing declares
+    /// the tool at all) demotes nothing, since there is no capability whose
+    /// trust it could be evidence about.
+    fn demote_on_denial(
+        &mut self,
+        history: &[Value],
+        capability: Option<&str>,
+        rule: &str,
+    ) -> Result<(), Fault> {
+        let budget = crate::trust::TrustBudget::from_policy(&self.policy);
+        if !budget.demotion_triggers.iter().any(|t| t == "policy.deny") {
+            return Ok(());
+        }
+        let Some(cap_id) = capability else {
+            return Ok(());
+        };
+        let Some(declared) = self
+            .policy
+            .capabilities
+            .iter()
+            .find(|c| c.id == cap_id)
+            .map(|c| c.rung)
+        else {
+            return Ok(());
+        };
+        let from = crate::trust::TrustState::replay(history, cap_id, declared).rung;
+        let Some(to) = from.down() else {
+            return Ok(());
+        };
+        self.core.append(
+            "rung.change",
+            json!({
+                "capability": cap_id,
+                "from": from.schema_name(),
+                "to": to.schema_name(),
+                "trigger": "demotion",
+                "approver": null,
+                "cause": rule,
+            }),
+        )
     }
 
     /// Everything after the call is cleared to run: credential substitution

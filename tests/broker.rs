@@ -85,7 +85,10 @@ fn destructive_command_denied_and_rule_named() {
     );
 
     let evs = events(&led);
-    // run.open, two registrations, request, decision, result, seal.
+    // run.open, two registrations, request, decision, the demotion the denial
+    // caused, result, seal. The rung.change sits between the decision and the
+    // result because the decision is its cause and the result is what the
+    // caller was told afterwards.
     let kinds: Vec<&str> = evs.iter().map(|e| e["kind"].as_str().unwrap()).collect();
     assert_eq!(
         kinds,
@@ -95,6 +98,7 @@ fn destructive_command_denied_and_rule_named() {
             "tool.register",
             "tool.request",
             "policy.decision",
+            "rung.change",
             "tool.result",
             "run.seal"
         ]
@@ -110,7 +114,7 @@ fn destructive_command_denied_and_rule_named() {
     let policy_version = tracked_policy().policy_version.unwrap();
     assert_eq!(evs[4]["authority"]["policy_version"], json!(policy_version));
 
-    let result = subject(&led, &evs[5]);
+    let result = subject(&led, &evs[6]);
     assert_eq!(result["outcome"], "denied");
     assert_eq!(result["taint"], false);
     let request = subject(&led, &evs[3]);
@@ -1087,5 +1091,150 @@ fn a_refusal_is_recorded_and_releases_nothing() {
             .cause
             .contains("no approval on this ledger releases it"),
         "a recorded refusal must not read as permission: {fault}"
+    );
+}
+
+// ---------- a denial narrows autonomy ----------
+
+/// The point of an earned rung. `config/policy.json` lists `policy.deny` as a
+/// demotion trigger, and until this landed nothing read it: a capability could
+/// be denied over and over and keep its rung as long as its sensors passed.
+/// Autonomy that only ever goes up is not earned.
+#[test]
+fn a_denial_narrows_the_capabilitys_autonomy() {
+    let dir = workdir("demote-on-deny");
+    let (mut run, led) = open_run(&dir, "demote");
+    run.call("Bash", "rm -rf /").unwrap_err();
+    run.seal("complete").unwrap();
+
+    let change = events(&led)
+        .iter()
+        .find(|e| e["kind"] == "rung.change")
+        .map(|e| subject(&led, e))
+        .expect("a denial demotes, and the demotion is an event");
+    assert_eq!(change["capability"], "shell.exec");
+    assert_eq!(
+        change["from"], "autonomous",
+        "shell.exec is declared autonomous in the tracked policy"
+    );
+    assert_eq!(change["to"], "assisted");
+    assert_eq!(change["trigger"], "demotion");
+    assert_eq!(
+        change["cause"], "r-destructive-shell",
+        "the demotion names the rule that caused it, so the arc stays explicable"
+    );
+}
+
+/// Demotion stops at the floor. There is no rung below the one where a human
+/// already drives, so further denials record no change rather than an
+/// unbounded slide or a wrapped value.
+#[test]
+fn demotion_stops_at_the_floor() {
+    let dir = workdir("demote-floor");
+    let ledger_dir = dir.join("ledger-floor");
+    for _ in 0..4 {
+        let mut run = BrokerRun::open(
+            if ledger_dir.join("events.jsonl").exists() {
+                Ledger::open(&ledger_dir).unwrap()
+            } else {
+                Ledger::init(&ledger_dir).unwrap()
+            },
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", "rm -rf /").unwrap_err();
+        run.seal("complete").unwrap();
+    }
+    let changes: Vec<Value> = events(&ledger_dir)
+        .iter()
+        .filter(|e| e["kind"] == "rung.change")
+        .map(|e| subject(&ledger_dir, e))
+        .collect();
+    assert_eq!(
+        changes.len(),
+        2,
+        "autonomous to assisted to led, and then nothing: {changes:?}"
+    );
+    assert_eq!(changes[1]["to"], "led");
+}
+
+/// The demotion follows the capability the decision named, not the tool. A
+/// denied `Read` costs `repo.read` its rung and leaves `shell.exec` alone.
+///
+/// The complementary case, a denial naming no capability at all, is not
+/// reachable through the broker: `r-default` fires only for a tool no
+/// capability declares, and such a tool is refused at registration before any
+/// call reaches the policy (see `undeclared_tool_is_refused_registration`).
+/// `demote_on_denial` still guards for it, because the policy can be
+/// evaluated outside the broker.
+#[test]
+fn the_demotion_follows_the_capability_the_decision_named() {
+    let dir = workdir("demote-no-cap");
+    let ledger_dir = dir.join("ledger-nocap");
+    let mut run = BrokerRun::open(
+        Ledger::init(&ledger_dir).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    // Registered and declared, but the target matches the credential-file rule,
+    // which denies under repo.read rather than falling through to r-default.
+    run.call("Read", "./.env").unwrap_err();
+    run.seal("complete").unwrap();
+
+    let changes: Vec<Value> = events(&ledger_dir)
+        .iter()
+        .filter(|e| e["kind"] == "rung.change")
+        .map(|e| subject(&ledger_dir, e))
+        .collect();
+    assert_eq!(changes.len(), 1, "one denial, one demotion");
+    assert_eq!(changes[0]["capability"], "repo.read");
+    assert_eq!(changes[0]["cause"], "r-credential-file");
+}
+
+/// The demotion is not decoration: the next call on that capability is gated
+/// by the rung the denial cost it, because the broker replays trust history
+/// before every decision.
+#[test]
+fn the_rung_a_denial_cost_gates_the_next_call() {
+    let dir = workdir("demote-gates");
+    let ledger_dir = dir.join("ledger-gates");
+    {
+        let mut run = BrokerRun::open(
+            Ledger::init(&ledger_dir).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", "rm -rf /").unwrap_err();
+        run.seal("complete").unwrap();
+    }
+    let mut run = BrokerRun::open(
+        Ledger::open(&ledger_dir).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    let _ = run.call("Bash", "echo hello");
+    run.seal("complete").unwrap();
+
+    let decision = events(&ledger_dir)
+        .iter()
+        .filter(|e| e["kind"] == "policy.decision")
+        .map(|e| subject(&ledger_dir, e))
+        .next_back()
+        .unwrap();
+    assert_eq!(
+        decision["rung"], "assisted",
+        "the earned rung after one denial gates this call, not the declared autonomous"
     );
 }

@@ -130,11 +130,10 @@ trust_budget:
   promotion:
     runs_at_rung: 20
     zero_sensor_failures: true
-    zero_human_overrides: true
     approver: any                # any | named
     emits: rung.change
   demotion:
-    triggers: [sensor.fail, human.override, policy.deny]
+    triggers: [sensor.fail, policy.deny]
     to: one_rung_down
     automatic: true
     approval_required: false
