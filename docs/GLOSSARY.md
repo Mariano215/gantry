@@ -234,7 +234,40 @@ declaration the loader checks, not a running undo.
 
 **Verdict.** The outcome of one evaluation: `allow`, `deny` or `hold`. Exactly
 one `policy.decision` event is written per call, whichever it is. A denial is
-never inferred from a missing allow. A `hold` call does not execute.
+never inferred from a missing allow. A `hold` call does not execute until an
+approval releases it.
+
+**Obligation.** What a decision still owes. A `hold` carries
+`obligation: approval`, meaning a human has to answer before the call runs. A
+post-gated `allow` carries `obligation: review`, which the run seal counts as
+outstanding.
+
+**Approval.** A human's answer to a held call, recorded as an `approval` event
+with `verdict` of `approve` or `deny`. Written by
+`gantry approve <ledger-dir> <request-id> <approver> [approve|deny]`. A
+refusal is an event, not an absence, because "nobody looked at this" and
+"somebody looked and said no" are different states and a missing event cannot
+tell them apart.
+
+**Call hash.** The canonical hash of a tool and its arguments, which is what an
+approval names. The request id cannot serve: every `gantry broker call` opens
+a new run, so the retry of a held call carries an id the approver never saw.
+The request id is recorded on the approval anyway, as provenance, because it
+is what the approver was looking at.
+
+**Approval use.** The `approval.use` event the broker writes when a held call
+finds its approval and runs. A grant is single use, bound to one call hash and
+one rule, so it releases one call and not the next. The `policy.decision` for
+that call still reads `hold`: the policy held it, and the release is a
+separate fact rather than a rewriting of the first one. An approval can never
+reverse a denial, because `gantry approve` refuses any request that did not
+resolve to `hold` and the broker consults approvals only on the hold branch.
+
+**Self-approval.** An approver who is also the calling identity. Permitted
+when the profile's approver is `any`, which is the laptop default, and
+recorded as `self_approved: true` on the `approval.use` either way. Visible
+rather than forbidden: a profile that wants separate eyes sets
+`approver: named` and leaves the agent off the list.
 
 **Rule id.** Every decision names one rule, so a denial stays explicable
 afterwards. Two ids are synthesized rather than written in the rules list:

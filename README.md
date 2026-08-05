@@ -332,9 +332,31 @@ check on its own, and CI runs it on every push.
 
 ### What you have not seen
 
-An hour gets you the record, the refusal, the sandbox and the score. It does
-not get you an anchored head, a drift report over the whole profile, or an
-isolation backend other than seatbelt, because none of those is built.
+An hour gets you the record, the refusal, the sandbox and the score. It skips
+the third verdict: a `hold`, where the policy neither permits nor refuses but
+waits for a human. That path runs, and it is the shortest way to see the whole
+idea in one place:
+
+```
+$ gantry broker call /tmp/demo/ledger Bash "git push origin main"
+policy held Bash on git push origin main: rule r-publish gates this call pre
+and no approval on this ledger releases it.
+
+$ gantry approve /tmp/demo/ledger <request-id> user:you@example.com
+approval run-...-0: user:you@example.com recorded approve for rule r-publish
+
+$ gantry broker call /tmp/demo/ledger Bash "git push origin main"
+[taint: true]
+```
+
+The decision event still reads `hold` afterwards, because that is what the
+policy computed; the release is a separate `approval.use`. Read the ledger top
+to bottom and it says: held, approved, spent, ran. `docs/proof/14.md` has the
+whole arc including the cases that must fail.
+
+An hour also does not get you an anchored head, a drift report over the whole
+profile, or an isolation backend other than seatbelt, because none of those is
+built.
 `docs/GLOSSARY.md` ends with the full list of terms that are declared and not
 yet running, and each proof document in `docs/proof/` closes with its own
 section on what is still a guide.
