@@ -330,11 +330,11 @@ impl BrokerRun {
         // rung the policy asserts. A demotion recorded by the orchestrator
         // therefore tightens this gate on the very next call.
         let history = self.core.replayable_events()?;
-        let mut decision = self
-            .policy
-            .decide_with_earned(&call, &self.identity, &|cap_id, declared| {
-                crate::trust::TrustState::replay(&history, cap_id, declared).rung
-            })?;
+        let mut decision =
+            self.policy
+                .decide_with_earned(&call, &self.identity, &|cap_id, declared| {
+                    crate::trust::TrustState::replay(&history, cap_id, declared).rung
+                })?;
         // The delegated grant is checked at the same chokepoint, before the
         // one decision event is written, so a sub-agent's denial names its
         // rule like any other.

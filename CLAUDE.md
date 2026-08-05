@@ -23,7 +23,9 @@ work item, and `gantry scan` on this repo is expected to report it.
   or the broker. A code path that reaches a provider SDK directly is a bug,
   because it is a hole in primitive 11. — enforced by `tests/invariants.rs`
   (build failure if the HTTP client is referenced outside `src/gateway.rs`);
-  `ci/no-direct-sdk` is the CI form of the same check once CI exists
+  `ci/run.sh` (run by `.github/workflows/ci.yml` on every push) is the CI
+  form: format, clippy with warnings as errors, the offline suite, policy
+  host-parity and template validation, as one gate
 - **The ledger is append-only.** No code mutates or deletes a ledger entry.
   Retention is expiry of the payload under a retained hash, never a rewrite.
   — enforced by `ci/ledger-append-only`

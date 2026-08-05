@@ -652,7 +652,9 @@ pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<Verif
         .collect();
     for (i, env) in envelopes.iter().enumerate() {
         let Some(env) = env else { continue };
-        let Some(att) = &env.attestation else { continue };
+        let Some(att) = &env.attestation else {
+            continue;
+        };
         let key_id = att["key_id"].as_str().unwrap_or("");
         let Some((_, vk)) = registered.iter().find(|(id, _)| id == key_id) else {
             report.attestations_unverified += 1;

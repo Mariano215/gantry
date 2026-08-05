@@ -353,7 +353,10 @@ fn broker_gates_on_the_earned_rung_not_the_declared_one() {
         .find(|e| e["kind"] == json!("policy.decision"))
         .unwrap();
     let decision = subject(&led, decision_env);
-    assert_eq!(decision["rung"], "led", "the earned rung gates, not the declared autonomous");
+    assert_eq!(
+        decision["rung"], "led",
+        "the earned rung gates, not the declared autonomous"
+    );
     assert_eq!(decision["gate"], "pre");
     assert_eq!(decision["verdict"], "hold");
 }

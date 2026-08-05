@@ -1,0 +1,22 @@
+name: ci
+
+# The CI form of the checks CLAUDE.md names. The suite needs macOS because
+# the execution-environment tests exercise the seatbelt sandbox
+# (sandbox-exec); a Linux runner would skip the very layer primitive 05
+# scores on.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: zsh ci/run.sh

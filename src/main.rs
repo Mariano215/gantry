@@ -717,7 +717,10 @@ fn skill_run(ledger_dir: &str, package_dir: &str, parent_caps: &str) -> Result<i
     for step in &resolved.steps {
         let step_path = pkg.join("steps").join(format!("{step}.md"));
         match run.call("Read", &step_path.display().to_string()) {
-            Ok(result) => println!("step {step}: {} bytes read under the grant", result.content.len()),
+            Ok(result) => println!(
+                "step {step}: {} bytes read under the grant",
+                result.content.len()
+            ),
             Err(fault) => {
                 eprintln!("step {step}: {fault}");
                 failures += 1;

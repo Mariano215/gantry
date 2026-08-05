@@ -150,11 +150,7 @@ pub fn permission_mode_check(
 ) -> (String, bool) {
     let declared = settings_text
         .and_then(|t| serde_json::from_str::<Value>(t).ok())
-        .and_then(|v| {
-            v["permissions"]["defaultMode"]
-                .as_str()
-                .map(String::from)
-        })
+        .and_then(|v| v["permissions"]["defaultMode"].as_str().map(String::from))
         .unwrap_or_else(|| "default".to_string());
     match observed {
         Some(mode) if !mode.trim().is_empty() => {

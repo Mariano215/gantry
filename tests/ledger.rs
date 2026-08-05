@@ -90,7 +90,10 @@ fn attestations_verify_against_a_registered_key_or_are_counted() {
     let report = ledger::verify(&dir).unwrap();
     assert!(report.ok());
     assert_eq!(report.attestations_verified, 0);
-    assert_eq!(report.attestations_unverified, 1, "unchecked is counted, not clean");
+    assert_eq!(
+        report.attestations_unverified, 1,
+        "unchecked is counted, not clean"
+    );
 }
 
 /// A forged attestation under a registered key id is a fault, not a count.
@@ -111,7 +114,10 @@ fn a_forged_attestation_under_a_registered_key_is_a_fault() {
     let report = ledger::verify_with_actor_keys(&dir, &[pub_hex]).unwrap();
     assert!(!report.ok(), "a forged attestation must fault");
     assert!(
-        report.faults.iter().any(|f| f.fault.cause.contains("does not verify")),
+        report
+            .faults
+            .iter()
+            .any(|f| f.fault.cause.contains("does not verify")),
         "faults: {:?}",
         report.faults
     );
