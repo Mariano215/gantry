@@ -159,3 +159,54 @@ fn missing_key_faults_before_any_request() {
     let fault = run.call(&p, &[msg("user", "hello")]).unwrap_err();
     assert!(fault.fix.contains("GANTRY_TEST_UNSET_KEY"), "fix names the var: {fault}");
 }
+
+/// A provider error body that echoes request headers (proxies and gateways
+/// do this in debug 4xx/5xx pages) must never carry the key onto the
+/// append-only ledger. Also the first test to exercise the Authorization
+/// header path, since the other call tests use key_env: None.
+#[test]
+fn provider_error_never_leaks_the_key_onto_the_ledger() {
+    let dir = workdir("call-key-leak");
+    let pin = pinning(&dir);
+    let sentinel = "sk-test-sentinel-9f3a1c";
+    std::env::set_var("GANTRY_TEST_SENTINEL_KEY", sentinel);
+    let body = format!(r#"{{"error":"rejected header Authorization: Bearer {sentinel}"}}"#);
+    let (base, srv) = stub(500, &body);
+    let led = dir.join("ledger");
+    let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    let p = provider(&base, "stub", Some("GANTRY_TEST_SENTINEL_KEY"));
+    let fault = run.call(&p, &[msg("user", "hello")]).unwrap_err();
+    run.seal("complete").unwrap();
+    srv.join().unwrap();
+    std::env::remove_var("GANTRY_TEST_SENTINEL_KEY");
+
+    assert!(!fault.cause.contains(sentinel), "fault cause carries the key: {fault}");
+
+    let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+    let call: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
+    assert_eq!(call["kind"], "model.call");
+    let s_hex = call["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
+    let subject: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{s_hex}.json"))).unwrap())
+            .unwrap();
+    assert_eq!(subject["outcome"], "error");
+
+    // Every file the run touched (events, heads, payloads) must be sentinel-free.
+    fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files_under(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    files_under(&led, &mut files);
+    assert!(!files.is_empty());
+    for f in files {
+        let text = fs::read_to_string(&f).unwrap_or_default();
+        assert!(!text.contains(sentinel), "sentinel leaked into {}", f.display());
+    }
+}

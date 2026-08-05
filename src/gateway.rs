@@ -288,6 +288,16 @@ pub struct CallResult {
     pub latency_ms: u64,
 }
 
+/// The key is a secret; a provider's error body (proxy debug pages echo
+/// headers more often than not) or transport error must never carry it into
+/// a Fault, since Fault.cause ends up on the append-only ledger.
+fn scrub(key: Option<&str>, text: &str) -> String {
+    match key {
+        Some(k) if !k.is_empty() => text.replace(k, "[redacted:key]"),
+        _ => text.to_string(),
+    }
+}
+
 fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, Fault> {
     let mut req = ureq::post(url).timeout(std::time::Duration::from_secs(180));
     if let Some(k) = key {
@@ -304,12 +314,12 @@ fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, F
             let text = resp.into_string().unwrap_or_default();
             let text = text.chars().take(300).collect::<String>();
             Err(Fault::new(
-                format!("provider returned HTTP {code}: {text}"),
+                scrub(key, &format!("provider returned HTTP {code}: {text}")),
                 "check the model name, the key, and the provider status page",
             ))
         }
         Err(ureq::Error::Transport(t)) => Err(Fault::new(
-            format!("cannot reach {url}: {t}"),
+            scrub(key, &format!("cannot reach {url}: {t}")),
             "check the base_url, the network route, and that the endpoint is up",
         )),
     }
