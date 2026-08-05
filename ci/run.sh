@@ -21,6 +21,16 @@ cargo run --quiet -- policy check config/policy.json .claude/settings.json
 echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
+echo "== every dependency has a note in docs/DEPENDENCIES.md =="
+deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
+for dep in ${(f)deps}; do
+  if ! grep -q "$dep" docs/DEPENDENCIES.md; then
+    echo "dependency $dep has no entry in docs/DEPENDENCIES.md. Fix: add a row naming why it is here and its network/process capability"
+    exit 1
+  fi
+done
+echo "all $(echo $deps | wc -w | tr -d ' ') dependencies documented"
+
 echo "== unenforced-rule census: CLAUDE.md markers are work items, not failures =="
 count=$(grep -c 'UNENFORCED' CLAUDE.md || true)
 echo "CLAUDE.md carries $count [UNENFORCED] marker line(s); gantry scan is expected to report them"

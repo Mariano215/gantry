@@ -145,7 +145,8 @@ work item, and `gantry scan` on this repo is expected to report it.
   — enforced by `ci/schema-compat`
 - Dependencies are added by a commit that says why. Anything with a network
   or process capability needs a note in `docs/DEPENDENCIES.md`.
-  — `[UNENFORCED]`
+  — enforced by `ci/run.sh`, which fails when a crate in `[dependencies]`
+  has no entry in that file
 
 ## Working agreement for agents
 
