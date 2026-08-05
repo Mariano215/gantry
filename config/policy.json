@@ -31,6 +31,13 @@
       "declared": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
       "observed_by": "hook.settings_hash"
     },
+    "attestation": {
+      "declared": "ed25519",
+      "key_id": "ed25519:407d778d0d4ca380",
+      "seed_env": "GANTRY_ACTOR_SEED",
+      "seed_file": "actor-key-fixture.seed",
+      "observed_by": "event.attestation.key_id"
+    },
     "rung_default": "autonomous",
     "on_unavailable": "degrade"
   },

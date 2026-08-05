@@ -361,6 +361,115 @@ fn broker_gates_on_the_earned_rung_not_the_declared_one() {
     assert_eq!(decision["verdict"], "hold");
 }
 
+/// The tracked laptop profile declares an actor key, so a real broker run
+/// signs every event it appends and the verifier reports them verified
+/// against config/actor-keys.json rather than counting them unverified.
+#[test]
+fn a_real_run_is_signed_and_verifies_against_the_tracked_registry() {
+    let dir = workdir("attested");
+    let f = dir.join("note.txt");
+    fs::write(&f, "content the run reads").unwrap();
+    let (mut run, led) = open_run(&dir, "attested");
+    run.call("Read", &f.display().to_string()).unwrap();
+    run.seal("complete").unwrap();
+
+    let registry = gantry::skills::KeyRegistry::load(&repo_path("config/actor-keys.json")).unwrap();
+    let report = ledger::verify_with_actor_keys(&led, &registry.key_hexes()).unwrap();
+    assert!(report.ok(), "faults: {:?}", report.faults);
+    assert_eq!(
+        report.attestations_verified,
+        events(&led).len(),
+        "every event of the run carries a verified attestation"
+    );
+    assert_eq!(report.attestations_unverified, 0);
+    let key_id = &events(&led)[0]["attestation"]["key_id"];
+    assert_eq!(
+        key_id,
+        &tracked_policy().profile_requirements["attestation"]["key_id"],
+        "the key on the event is the key the profile declares"
+    );
+}
+
+/// Altering a signed event after the fact is reported as alteration: the
+/// attestation covers the fields the actor controls, so an edited envelope
+/// no longer verifies under the key that signed it.
+#[test]
+fn altering_a_signed_event_is_reported_as_alteration() {
+    let dir = workdir("attested-altered");
+    let (run, led) = open_run(&dir, "attested-altered");
+    run.seal("complete").unwrap();
+
+    let path = led.join("events.jsonl");
+    let mut lines: Vec<Value> = fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    lines[0]["ts"] = json!("2020-01-01T00:00:00.000Z");
+    let rewritten: Vec<String> = lines
+        .iter()
+        .map(|e| serde_json::to_string(e).unwrap())
+        .collect();
+    fs::write(&path, rewritten.join("\n") + "\n").unwrap();
+
+    let registry = gantry::skills::KeyRegistry::load(&repo_path("config/actor-keys.json")).unwrap();
+    let report = ledger::verify_with_actor_keys(&led, &registry.key_hexes()).unwrap();
+    assert!(!report.ok(), "an altered signed event must fault");
+    assert!(
+        report.faults.iter().any(|f| f
+            .fault
+            .cause
+            .contains("carries an attestation under registered key")
+            && f.fault.fix.contains("altered after signing")),
+        "the fault names alteration: {:?}",
+        report.faults
+    );
+}
+
+/// A profile that declares an actor key it cannot load refuses to start.
+/// Appending unsigned under a profile that says it signs is the silent
+/// degradation this refusal exists to prevent.
+#[test]
+fn a_profile_declaring_an_unloadable_actor_key_refuses_to_start() {
+    let dir = workdir("attested-unloadable");
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(repo_path("config/policy.json")).unwrap())
+            .unwrap();
+    doc["profile_requirements"]["attestation"]["seed_file"] = json!("no-such-key.seed");
+    let policy_path = dir.join("policy.json");
+    fs::write(&policy_path, serde_json::to_string(&doc).unwrap()).unwrap();
+
+    let pin = Pinning {
+        policy: policy_path.clone(),
+        instructions: dir.join("pack.md"),
+        settings: None,
+        diverged: vec![],
+    };
+    fs::write(&pin.instructions, "you are an audit agent").unwrap();
+    let led = dir.join("ledger-unloadable");
+    let fault = BrokerRun::open(
+        Ledger::init(&led).unwrap(),
+        Policy::load(&policy_path).unwrap(),
+        "broker-test",
+        &pin,
+    )
+    .map(|_| ())
+    .unwrap_err();
+    assert!(fault.cause.contains("no-such-key.seed"), "{fault}");
+    assert!(
+        fault.fix.contains("appending unsigned"),
+        "the fix names the refusal rule: {fault}"
+    );
+    assert!(
+        !led.join("events.jsonl").exists()
+            || fs::read_to_string(led.join("events.jsonl"))
+                .unwrap()
+                .trim()
+                .is_empty(),
+        "a refused run appends nothing"
+    );
+}
+
 /// ci/policy-host-parity, run against the tracked host settings: every deny
 /// entry the host can short-circuit resolves to deny or hold here.
 #[test]

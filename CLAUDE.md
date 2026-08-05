@@ -133,9 +133,22 @@ work item, and `gantry scan` on this repo is expected to report it.
   registry. See `docs/proof/01.md` section 6. — enforced since the post-nine
   gap work by `ledger::verify_with_actor_keys`; exercised by
   `tests/ledger.rs` (`attestations_verify_against_a_registered_key_or_are_counted`,
-  `a_forged_attestation_under_a_registered_key_is_a_fault`). The remaining
-  gap: no producer emits attestations yet (the laptop profile default is
-  null), so the checked path is exercised by tests, not by runs.
+  `a_forged_attestation_under_a_registered_key_is_a_fault`). Since slice 10
+  the producer signs: the profile declares its actor key in
+  `profile_requirements.attestation` (the key id, and where the seed is read
+  from), and `RunCore` signs every event the gateway and the broker append
+  over `Envelope::attestation_bytes`. A profile that declares a key it cannot
+  load, or a seed that produces a different key id than declared, refuses the
+  run rather than appending unsigned; a profile that declares no key appends
+  unsigned, which verify reports as a count. The tracked laptop profile
+  declares one, so `gantry ledger verify` on a real run reports every event
+  verified rather than counted. — enforced by `src/runlog.rs`
+  (`ActorSigner::declared`), `tests/broker.rs`
+  (`a_real_run_is_signed_and_verifies_against_the_tracked_registry`,
+  `altering_a_signed_event_is_reported_as_alteration`,
+  `a_profile_declaring_an_unloadable_actor_key_refuses_to_start`) and
+  `tests/gateway.rs`
+  (`the_gateway_signs_under_the_key_the_pinned_profile_declares`)
 
 ## Code standards
 

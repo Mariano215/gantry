@@ -400,6 +400,49 @@ fn key_bytes_never_reach_the_ledger() {
     }
 }
 
+/// The gateway signs under the key the pinned profile declares. The seed
+/// source is part of the declaration too: the file beside the policy by
+/// default, the declared environment variable when it is set, and a seed that
+/// produces a different key id than the profile declares refuses the run.
+#[test]
+fn the_gateway_signs_under_the_key_the_pinned_profile_declares() {
+    let dir = workdir("attested");
+    let pack = dir.join("pack.md");
+    fs::write(&pack, "you are an audit agent").unwrap();
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let pin = Pinning {
+        policy: repo.join("config/policy.json"),
+        instructions: pack,
+        settings: None,
+        diverged: vec![],
+    };
+
+    let led = dir.join("ledger");
+    let run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    run.seal("complete").unwrap();
+
+    let registry = gantry::skills::KeyRegistry::load(&repo.join("config/actor-keys.json")).unwrap();
+    let report = ledger::verify_with_actor_keys(&led, &registry.key_hexes()).unwrap();
+    assert!(report.ok(), "faults: {:?}", report.faults);
+    assert_eq!(report.attestations_verified, 2, "run.open and run.seal");
+    assert_eq!(report.attestations_unverified, 0);
+
+    // The environment source wins where it is set, and a seed under it that
+    // is not the declared key refuses the run rather than signing as an
+    // actor the registry never heard of.
+    std::env::set_var("GANTRY_ACTOR_SEED", "11".repeat(32));
+    let fault = GatewayRun::open(
+        Ledger::init(&dir.join("ledger-wrong-key")).unwrap(),
+        "smoke",
+        &pin,
+    )
+    .map(|_| ())
+    .unwrap_err();
+    std::env::remove_var("GANTRY_ACTOR_SEED");
+    assert!(fault.cause.contains("but the seed produces"), "{fault}");
+    assert!(fault.fix.contains("config/actor-keys.json"), "{fault}");
+}
+
 #[test]
 fn base_url_with_credential_is_rejected() {
     let dir = workdir("providers-cred");
