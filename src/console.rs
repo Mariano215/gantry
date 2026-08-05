@@ -8,7 +8,9 @@
 //! - Read-only. GET is the only method; anything else is 405. The console
 //!   cannot approve, promote, demote or append, because a UI that can move a
 //!   rung is an authority surface and the laptop profile has no identity
-//!   story for one.
+//!   story for one. `/api/approvals` shows what is waiting for a human and
+//!   prints the command that resolves it; the command runs at a terminal
+//!   under a named identity, never here.
 //! - Every response derives from the ledger on that request. Nothing is
 //!   cached across requests, so a page is the current state of the log or it
 //!   is a fault.
@@ -451,12 +453,13 @@ fn api(ledger_dir: &str, route: &str, query: &[(String, String)]) -> Result<Valu
         "runs" => runs(ledger_dir),
         "policy" => policy(ledger_dir),
         "trust" => trust(ledger_dir),
+        "approvals" => approvals(ledger_dir),
         "verify" => verify(ledger_dir),
         _ => match route.strip_prefix("events/") {
             Some(id) if !id.is_empty() && !id.contains('/') => one_event(ledger_dir, id),
             _ => Err(not_found(Fault::new(
                 format!("/api/{route} is not a route"),
-                "the routes are /api/score, /api/head, /api/events, /api/events/:id, /api/runs, /api/policy, /api/trust and /api/verify; see docs/CONSOLE-API.md",
+                "the routes are /api/score, /api/head, /api/events, /api/events/:id, /api/runs, /api/policy, /api/trust, /api/approvals and /api/verify; see docs/CONSOLE-API.md",
             ))),
         },
     }
@@ -835,6 +838,247 @@ fn trust(ledger_dir: &str) -> Result<Value, ApiError> {
         })
         .collect();
     Ok(json!({ "capabilities": capabilities }))
+}
+
+/// One held call, keyed by the pair a grant is bound to: the call hash and
+/// the rule that held it. A retry is a new run with a new request id and the
+/// same call hash, so the request is not the unit an approver acts on.
+struct Hold {
+    call_hash: String,
+    rule: String,
+    tool: String,
+    target: String,
+    capability: Option<String>,
+    message: Option<String>,
+    held: u64,
+    first_held_at: String,
+    last_held_at: String,
+    request_id: String,
+    run_id: String,
+    decision_event: String,
+    grants: Vec<Value>,
+}
+
+/// The approval inbox. Every call the policy held, and what the record says
+/// has happened to it since.
+///
+/// Read-only, like every other route here, and this one deliberately so. It
+/// prints the command a named human runs at a terminal; it does not offer to
+/// run it. An approval written by a click on a loopback port would carry the
+/// approver's name with nothing behind it, which is a different claim from
+/// the one `docs/proof/14.md` argues.
+///
+/// The usable-grant test repeats the broker's own, in `usable_grant`: an
+/// approve verdict, an approver the trust budget permits, and no
+/// `approval.use` that spent it. A console that showed a grant as releasing
+/// a call the broker would still hold would be worse than showing nothing.
+fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
+    let (policy, _) = load_policy()?;
+    let budget = crate::trust::TrustBudget::from_policy(&policy);
+    let events = open_ledger(ledger_dir)?
+        .events_with_subjects()
+        .map_err(read_failure)?;
+    let rule_message: BTreeMap<&str, &str> = policy
+        .rules
+        .iter()
+        .filter_map(|r| Some((r.id.as_str(), r.message.as_deref()?)))
+        .collect();
+
+    // The broker appends tool.request and then exactly one policy.decision,
+    // so the pairing is emission order rather than a join key that could go
+    // stale. Same walk as `gantry approve`.
+    let mut holds: Vec<Hold> = Vec::new();
+    let mut pending: Option<(String, String)> = None;
+    for ev in &events {
+        let subject = &ev["_subject"];
+        match ev["kind"].as_str() {
+            Some("tool.request") => {
+                pending = match (
+                    subject["request_id"].as_str(),
+                    subject["call_hash"].as_str(),
+                ) {
+                    (Some(id), Some(hash)) => Some((id.to_string(), hash.to_string())),
+                    // A tool.request whose payload has expired carries no call
+                    // hash, so nothing can be approved against it. It is left
+                    // out rather than listed with a hash this made up.
+                    _ => None,
+                };
+            }
+            Some("policy.decision") => {
+                let Some((request_id, call_hash)) = pending.take() else {
+                    continue;
+                };
+                if subject["verdict"].as_str() != Some("hold") {
+                    continue;
+                }
+                let rule = subject["rule"].as_str().unwrap_or_default().to_string();
+                let ts = ev["ts"].as_str().unwrap_or_default().to_string();
+                if let Some(hold) = holds
+                    .iter_mut()
+                    .find(|h| h.call_hash == call_hash && h.rule == rule)
+                {
+                    hold.held += 1;
+                    hold.last_held_at = ts;
+                    hold.request_id = request_id;
+                    hold.run_id = ev["run_id"].as_str().unwrap_or_default().to_string();
+                    hold.decision_event = ev["id"].as_str().unwrap_or_default().to_string();
+                    continue;
+                }
+                let message = subject["message"]
+                    .as_str()
+                    .map(String::from)
+                    .or_else(|| rule_message.get(rule.as_str()).map(|m| (*m).to_string()));
+                holds.push(Hold {
+                    tool: subject["request"]["tool"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    target: subject["request"]["target"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    capability: subject["capability"].as_str().map(String::from),
+                    message,
+                    held: 1,
+                    first_held_at: ts.clone(),
+                    last_held_at: ts,
+                    request_id,
+                    run_id: ev["run_id"].as_str().unwrap_or_default().to_string(),
+                    decision_event: ev["id"].as_str().unwrap_or_default().to_string(),
+                    grants: Vec::new(),
+                    call_hash,
+                    rule,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    // Which grants have been spent, and when. A grant is single use, so a
+    // spent one releases nothing however good it looked.
+    let spent: BTreeMap<&str, &str> = events
+        .iter()
+        .filter(|e| e["kind"].as_str() == Some("approval.use"))
+        .filter_map(|e| {
+            Some((
+                e["_subject"]["grant_id"].as_str()?,
+                e["ts"].as_str().unwrap_or_default(),
+            ))
+        })
+        .collect();
+    for ev in events.iter().filter(|e| e["kind"] == json!("approval")) {
+        let subject = &ev["_subject"];
+        let (Some(call_hash), Some(rule)) =
+            (subject["call_hash"].as_str(), subject["rule"].as_str())
+        else {
+            continue;
+        };
+        let Some(hold) = holds
+            .iter_mut()
+            .find(|h| h.call_hash == call_hash && h.rule == rule)
+        else {
+            continue;
+        };
+        let grant_id = subject["grant_id"].as_str().unwrap_or_default();
+        let approver = subject["approver"].as_str().unwrap_or_default();
+        hold.grants.push(json!({
+            "grant_id": grant_id,
+            "verdict": subject["verdict"],
+            "approver": approver,
+            "ts": ev["ts"],
+            "event_id": ev["id"],
+            "request_id": subject["request_id"],
+            // Re-derived here rather than trusted, for the same reason the
+            // broker re-derives it: a ledger is a file, and anything that can
+            // write it can append an approval naming any approver it likes.
+            "permitted": budget.approver_ok(approver),
+            "spent": spent.contains_key(grant_id),
+            "spent_at": spent.get(grant_id).map(|ts| json!(ts)).unwrap_or(Value::Null),
+        }));
+    }
+
+    let ledger_path = std::fs::canonicalize(Path::new(ledger_dir))
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| ledger_dir.to_string());
+    let approvers = match &budget.approver {
+        crate::trust::Approver::Named(names) => json!(names),
+        crate::trust::Approver::Any => json!("any"),
+    };
+    // The command names an approver when the policy names one. Where the
+    // profile permits any, the console cannot know who is at the terminal, so
+    // the placeholder stays and the view says to replace it.
+    let approver_arg = match &budget.approver {
+        crate::trust::Approver::Named(names) if !names.is_empty() => names[0].clone(),
+        _ => "<approver>".to_string(),
+    };
+
+    // Newest first: an operator reads the inbox for what just blocked.
+    holds.sort_by(|a, b| b.last_held_at.cmp(&a.last_held_at));
+    let mut blocked = 0u64;
+    let items: Vec<Value> = holds
+        .iter()
+        .map(|h| {
+            let usable = h.grants.iter().any(|g| {
+                g["verdict"] == json!("approve")
+                    && g["permitted"] == json!(true)
+                    && g["spent"] == json!(false)
+            });
+            // Five states, because they are five different things to do next.
+            // "Nobody looked" and "somebody said no" are the pair proof 14
+            // exists to keep apart; the other three fall out of the same
+            // predicate the broker gates on.
+            let state = if usable {
+                "released"
+            } else if h.grants.last().map(|g| &g["verdict"]) == Some(&json!("deny")) {
+                "refused"
+            } else if h
+                .grants
+                .iter()
+                .any(|g| g["verdict"] == json!("approve") && g["spent"] == json!(true))
+            {
+                "spent"
+            } else if h
+                .grants
+                .iter()
+                .any(|g| g["verdict"] == json!("approve") && g["permitted"] == json!(false))
+            {
+                "ineffective"
+            } else {
+                "waiting"
+            };
+            if !usable {
+                blocked += 1;
+            }
+            json!({
+                "call_hash": h.call_hash,
+                "rule": h.rule,
+                "message": h.message,
+                "capability": h.capability,
+                "tool": h.tool,
+                "target": h.target,
+                "held": h.held,
+                "first_held_at": h.first_held_at,
+                "last_held_at": h.last_held_at,
+                "request_id": h.request_id,
+                "run_id": h.run_id,
+                "decision_event": h.decision_event,
+                "state": state,
+                "releases_next_call": usable,
+                "grants": h.grants,
+                "approve_command": format!(
+                    "gantry approve {ledger_path} {} {approver_arg}", h.request_id
+                ),
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "holds": items,
+        "blocked": blocked,
+        "released": holds.len() as u64 - blocked,
+        "approvers": approvers,
+        "ledger": ledger_path,
+    }))
 }
 
 fn verify(ledger_dir: &str) -> Result<Value, ApiError> {

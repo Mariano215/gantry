@@ -15,16 +15,24 @@ const EVENT_PAGE_MAX = 1000;
 // A table row that expands in place. The detail is built lazily and torn down
 // on collapse, so a thousand-row table holds a thousand rows, not a thousand
 // detail panes.
-function expandableRow(cells, colspan, buildDetail, cls) {
+//
+// `open` is an optional { set, key }. A table that repaints (the ledger view
+// repaints every time the five second poll finds new events) builds new rows
+// from scratch, so an expansion held only by the old row dies with it. The
+// set outlives the repaint and the new row reopens itself, which is what
+// makes reading a payload during a live run possible at all.
+function expandableRow(cells, colspan, buildDetail, cls, open) {
   const tr = el('tr', { class: cls || null, 'data-row': '' }, cells);
   let detail = null;
   const collapse = () => {
+    if (open) open.set.delete(open.key);
     if (!detail) return;
     detail.remove();
     detail = null;
     tr.classList.remove('is-open');
   };
   const expand = () => {
+    if (open) open.set.add(open.key);
     if (detail) return;
     const box = el('div', { class: 'detail-grid' });
     detail = el('tr', { class: 'detail' }, el('td', { colspan }, box));
@@ -38,6 +46,9 @@ function expandableRow(cells, colspan, buildDetail, cls) {
     if (detail) collapse();
     else expand();
   });
+  // After the caller has put the row in a table: `after` needs a parent, and
+  // a row has none while it is being built.
+  if (open && open.set.has(open.key)) queueMicrotask(expand);
   return tr;
 }
 
@@ -133,8 +144,11 @@ export async function overview(host) {
     kinds.set(e.kind, (kinds.get(e.kind) || 0) + 1);
   }
   const attested = counts.verified;
+  // The read is limit and offset over the ledger in append order, so a
+  // truncated page is the oldest events and not the newest. Saying "most
+  // recent" here described the page nobody was looking at.
   const sample = evs.total > events.length
-    ? `over the ${num(events.length)} most recent of ${num(evs.total)} events`
+    ? `over the first ${num(events.length)} of ${num(evs.total)} events in append order`
     : `over all ${num(evs.total)} events`;
 
   const overall = score.overall;
@@ -289,6 +303,9 @@ export async function ledger(host, route) {
   let total = 0;
   let seenIds = new Set();
   let timer = null;
+  // Which rows the reader has open, by event id. Survives a repaint, so the
+  // poll arriving mid-read no longer closes the payload being read.
+  const openRows = new Set();
 
   function syncLive() {
     const canLive = ledgerState.offset === 0;
@@ -348,7 +365,7 @@ export async function ledger(host, route) {
           td(el('span', { class: 'mono trunc', title: actorId(ev.actor) }, actorId(ev.actor)), 'trunc'),
           td(ev.run_id ? el('a', { class: 'mono', href: `#/run/${encodeURIComponent(ev.run_id)}`, title: ev.run_id }, shortId(ev.run_id, 14)) : mono('—'), 'nowrap'),
           td(subjectSummary(ev), 'trunc'),
-        ], 7, (box) => eventDetail(box, ev), classes.join(' '));
+        ], 7, (box) => eventDetail(box, ev), classes.join(' '), { set: openRows, key: ev.id });
       }),
       { empty: rows.length ? 'no loaded row matches the filter' : 'no events match these query parameters' },
     ));
@@ -465,6 +482,24 @@ async function runDetail(host, id) {
   const events = evsRes.events || [];
   const ruleMessage = new Map(((policyRes && policyRes.rules) || []).map((r) => [r.id, r.message]));
 
+  // /api/events returns at most EVENT_PAGE_MAX rows and reports how many
+  // matched. A waterfall that stopped at a thousand and said nothing would be
+  // a complete-looking rendering of an incomplete read, which on this product
+  // is a worse failure than refusing to draw the page at all.
+  const matched = evsRes.total;
+  const truncated = Number(matched) > events.length;
+  const dropped = truncated ? matched - events.length : 0;
+  const pageNote = truncated
+    ? el('div', { class: 'warnbox' },
+      el('h3', {}, `this waterfall is the first ${num(events.length)} events of ${num(matched)} on this run`),
+      el('div', {}, `${num(dropped)} events carrying this run id are not drawn here. `,
+        'The API returns at most ', mono(num(EVENT_PAGE_MAX)), ' events per read, in append order, so what follows is the start of the run and not all of it.'),
+      el('div', { class: 'fix' }, el('b', {}, 'fix: '),
+        'read the rest in the ',
+        el('a', { href: `#/ledger?run=${encodeURIComponent(id)}` }, 'ledger view filtered to this run'),
+        ', which pages the same events, or narrow the read with the since filter there.'))
+    : null;
+
   const t0 = events.length ? new Date(events[0].ts).getTime() : 0;
   const tEnd = events.length ? new Date(events[events.length - 1].ts).getTime() : 0;
   const span = Math.max(tEnd - t0, 1);
@@ -476,7 +511,11 @@ async function runDetail(host, id) {
       meta && !meta.sealed ? el('span', { class: 'tag tag-warn' }, 'unsealed') : null,
     ),
     el('div', { class: 'grid-3' },
-      stat('events', num(events.length), meta ? `${num(meta.events)} counted by the API` : 'run not present in /api/runs'),
+      stat('events', `${num(events.length)} of ${num(matched)}`,
+        truncated
+          ? `drawn of the events matching this run id; ${num(dropped)} are not on this page`
+          : 'drawn of the events matching this run id, so this waterfall is the whole run',
+        { cls: truncated ? 'warn-text' : null }),
       stat('denials', num(meta ? meta.denials : events.filter(isDeny).length), 'each names the rule that fired',
         { cls: (meta ? meta.denials : 0) ? 'deny-text' : null }),
       stat('unattested', num(meta ? meta.unattested : events.filter((e) => e._attestation_state !== 'verified').length),
@@ -486,6 +525,7 @@ async function runDetail(host, id) {
         { cls: meta && !meta.sealed ? 'warn-text' : null }),
     ),
     panel('Waterfall', { sub: 'model calls, tool requests, policy decisions, sandbox executions and sensor verdicts in append order', flush: true },
+      pageNote,
       table(
         [
           { label: 'attestation', width: '13ch' }, { label: 'seq', num: true, width: '6ch' },
@@ -624,6 +664,193 @@ export async function trust(host) {
   );
 }
 
+// ---------- inbox ----------
+//
+// Every call the policy held, and what the record says has happened to it.
+// The console prints the command; it never runs one. A button here would
+// write an approval carrying a human's name with nothing behind it but a
+// loopback port, and that is a different claim from the one the approval
+// path makes.
+
+const HOLD_STATE = {
+  waiting: {
+    label: 'waiting',
+    cls: 'tag tag-warn',
+    note: 'nobody has answered this call on the record',
+  },
+  refused: {
+    label: 'refused',
+    cls: 'tag tag-deny',
+    note: 'a human recorded a deny, and the call stays held; a refusal releases nothing',
+  },
+  spent: {
+    label: 'grant spent',
+    cls: 'tag tag-dashed',
+    note: 'a grant released this call once and was spent, and it has been held again since; a grant is single use, so this needs a new approval',
+  },
+  ineffective: {
+    label: 'approver not permitted',
+    cls: 'tag tag-deny',
+    note: 'an approve grant is on the ledger under an approver this policy trust budget does not permit, so the broker will not release the call',
+  },
+  released: {
+    label: 'released',
+    cls: 'tag',
+    note: 'a usable grant is on the ledger; the next identical call runs and spends it',
+  },
+};
+
+const holdState = (h) => HOLD_STATE[h.state] || {
+  label: `unknown state ${h.state}`,
+  cls: 'tag tag-warn',
+  note: 'the API returned a state this console does not know; read /api/approvals directly',
+};
+
+function grantTable(h) {
+  return table(
+    [
+      { label: 'ts', width: '24ch' }, { label: 'verdict', width: '10ch' }, { label: 'approver', width: '24ch' },
+      { label: 'grant', width: '24ch' }, { label: 'spent', width: '10ch' }, { label: 'permitted' },
+    ],
+    (h.grants || []).map((g) => el('tr', {},
+      td(mono(g.ts || '?'), 'nowrap'),
+      td(g.verdict === 'deny'
+        ? el('span', { class: 'tag tag-deny' }, 'deny')
+        : el('span', { class: 'tag' }, g.verdict || '?')),
+      td(mono(g.approver || 'unnamed')),
+      td(g.event_id
+        ? el('a', { class: 'mono', href: `#/ledger/${encodeURIComponent(g.event_id)}` }, shortId(g.grant_id || g.event_id, 18))
+        : mono(g.grant_id || '?')),
+      td(g.spent
+        ? el('span', { class: 'tag tag-dashed', title: `spent by an approval.use at ${g.spent_at}` }, 'spent')
+        : el('span', { class: 'faint' }, 'no')),
+      td(g.permitted
+        ? el('span', { class: 'dim' }, 'yes, under this policy trust budget')
+        : el('span', { class: 'deny-text' }, 'no, and the broker re-checks this where the grant is used')),
+    )),
+    { empty: 'nobody has answered this call: there is no approval event naming it', rowsAttr: false },
+  );
+}
+
+function holdDetail(box, h, approvers) {
+  box.append(section('the call', kv([
+    ['tool', mono(h.tool || '?')],
+    ['target', mono(h.target || '?')],
+    ['capability', mono(h.capability ?? 'none named')],
+    ['rule', mono(h.rule)],
+    ['call hash', mono(h.call_hash)],
+    ['held', mono(`${num(h.held)} time${h.held === 1 ? '' : 's'}`)],
+    ['first held', mono(h.first_held_at)],
+    ['last held', mono(h.last_held_at)],
+  ])));
+
+  box.append(section('what the record says', el('div', {},
+    el('div', { class: 'stat-note', style: 'margin-bottom:8px' }, holdState(h).note),
+    el('div', {},
+      el('a', { href: `#/ledger/${encodeURIComponent(h.decision_event)}`, class: 'mono' }, 'open the policy.decision'),
+      ' · ',
+      el('a', { href: `#/run/${encodeURIComponent(h.run_id)}`, class: 'mono' }, 'open the run')),
+  )));
+
+  box.append(el('div', { style: 'grid-column:1/-1' }, section('approvals on the record', grantTable(h))));
+
+  box.append(el('div', { style: 'grid-column:1/-1' }, section(
+    h.releases_next_call ? 'this call is already released' : 'resolve it from a terminal',
+    h.releases_next_call
+      ? el('p', { class: 'stat-note' },
+        'A usable grant is on the ledger. Make the same call again and the broker spends it: the policy.decision still reads hold, because that is what the policy computed, and the release is a separate approval.use.')
+      : el('div', {},
+        commandBox(h.approve_command),
+        el('p', { class: 'stat-note', style: 'margin:8px 0 0' },
+          'Run it from the harness root: gantry approve reads config/policy.json from the working directory. ',
+          approvers === 'any'
+            ? 'This profile permits any approver, so replace the placeholder with your own identity; approving your own call is permitted here and recorded as self_approved on the approval.use.'
+            : 'This profile names its approvers, and a grant from anyone else releases nothing.',
+          ' Add deny as a last argument to record a refusal instead, which is an event and not an absent one.'),
+        el('p', { class: 'stat-note', style: 'margin:6px 0 0' },
+          'The console never writes an approval. It reports what is waiting and prints the command a named human runs.')),
+  )));
+}
+
+export async function inbox(host, route) {
+  const body = el('div', { class: 'view' }, loading('held calls'));
+  clear(host).append(body);
+  // #/inbox/<call hash> opens that hold. A held call is the thing one person
+  // hands another, so it gets a link, and the same registry that keeps a row
+  // open across a repaint is what opens it.
+  const focus = route && route.segments[1] ? decodeURIComponent(route.segments[1]) : null;
+  const openHolds = new Set(focus ? [focus] : []);
+  const a = await api.approvals();
+  const holds = a.holds || [];
+  const approvers = a.approvers;
+  const blocked = holds.filter((h) => !h.releases_next_call);
+  const released = holds.filter((h) => h.releases_next_call);
+  const unanswered = blocked.filter((h) => h.state === 'waiting').length;
+
+  const row = (h) => {
+    const s = holdState(h);
+    const last = (h.grants || [])[(h.grants || []).length - 1];
+    return expandableRow([
+      td(el('span', { class: s.cls, title: s.note }, s.label), 'nowrap'),
+      td(el('span', { class: 'mono', title: h.last_held_at }, `${tsDate(h.last_held_at)} ${tsShort(h.last_held_at)}`), 'nowrap'),
+      td(mono(h.rule), 'nowrap'),
+      td(mono(h.capability ?? 'none named'), 'nowrap'),
+      td(el('span', { class: 'mono trunc', title: `${h.tool} ${h.target}` }, `${h.tool} ${h.target}`), 'trunc'),
+      td(mono(num(h.held)), 'num'),
+      td(last
+        ? el('span', { class: 'mono dim' }, `${last.verdict} by ${last.approver} at ${tsShort(last.ts)}`)
+        : el('span', { class: 'faint' }, 'nobody has looked')),
+    ], 7, (box) => holdDetail(box, h, approvers), focus === h.call_hash ? 'is-selected' : null,
+    { set: openHolds, key: h.call_hash });
+  };
+
+  clear(body).append(
+    el('div', { class: 'grid-3' },
+      stat('held and not released', num(blocked.length),
+        blocked.length ? 'each is a run waiting on a human' : 'nothing on this ledger is waiting on a human',
+        { huge: true, cls: blocked.length ? 'warn-text' : null }),
+      stat('nobody has looked', num(unanswered), 'held calls with no approval event naming them',
+        { cls: unanswered ? 'warn-text' : null }),
+      stat('released, not yet retried', num(released.length), 'a usable grant sits on the ledger for these'),
+      stat('permitted approvers', approvers === 'any' ? 'any' : num((approvers || []).length),
+        approvers === 'any'
+          ? 'trust_budget.promotion.approver is any on this profile, so self approval is permitted and recorded'
+          : (approvers || []).join(', ')),
+    ),
+
+    panel('Waiting for a human', {
+      sub: 'a hold is not a failure, it is a call waiting for an answer · open a row for the command that resolves it',
+      flush: true,
+    }, table(
+      [
+        { label: 'state', width: '22ch' }, { label: 'last held', width: '22ch' }, { label: 'rule', width: '16ch' },
+        { label: 'capability', width: '16ch' }, { label: 'call' }, { label: 'held', num: true, width: '6ch' },
+        { label: 'latest answer', width: '38ch' },
+      ],
+      blocked.map(row),
+      { empty: 'no held call on this ledger is waiting: every hold has a usable grant, or nothing was ever held' },
+    )),
+
+    panel('Released, waiting for the retry', {
+      sub: 'an approval is single use and bound to the call hash, so the retry spends it and the next call is held again',
+      flush: true,
+    }, table(
+      [
+        { label: 'state', width: '22ch' }, { label: 'last held', width: '22ch' }, { label: 'rule', width: '16ch' },
+        { label: 'capability', width: '16ch' }, { label: 'call' }, { label: 'held', num: true, width: '6ch' },
+        { label: 'latest answer', width: '38ch' },
+      ],
+      released.map(row),
+      { empty: 'no grant on this ledger releases a call right now' },
+    )),
+
+    panel('Why there is no approve button here', {}, el('p', { class: 'stat-note', style: 'margin:0' },
+      'The API is GET only and this view writes nothing. An approval names the human who gave it, and a click on a loopback port names nobody: ',
+      'the console has no identity story, so a button here would put a name on the ledger that the record could not stand behind. ',
+      'The command above runs at a terminal, under whoever is at it, and the ledger records the answer either way.')),
+  );
+}
+
 // ---------- verify ----------
 
 export async function verify(host) {
@@ -713,4 +940,4 @@ export async function verify(host) {
   }
 }
 
-export const views = { overview, ledger, run, policy, trust, verify };
+export const views = { overview, ledger, run, policy, trust, inbox, verify };
