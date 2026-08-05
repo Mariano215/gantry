@@ -212,6 +212,66 @@ impl SkillManifest {
     }
 }
 
+/// One registered signing key: who owns it and the ed25519 public key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisteredKey {
+    pub owner: String,
+    pub public_key_hex: String,
+}
+
+/// The managed key registry, a tracked file (`config/skill-keys.json`). A
+/// key that does not parse, or an entry with no owner, refuses the whole
+/// registry at load: a registry that silently dropped bad entries would trust
+/// fewer keys than version control says it does, and the divergence would be
+/// invisible.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct KeyRegistry {
+    pub keys: Vec<RegisteredKey>,
+}
+
+impl KeyRegistry {
+    pub fn load(path: &Path) -> Result<KeyRegistry, Fault> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            Fault::new(
+                format!("cannot read key registry {}: {e}", path.display()),
+                "check the path; the tracked registry is config/skill-keys.json",
+            )
+        })?;
+        let registry: KeyRegistry = serde_json::from_str(&text).map_err(|e| {
+            Fault::new(
+                format!("{} does not parse as a key registry: {e}", path.display()),
+                "the registry is { \"keys\": [ { \"owner\", \"public_key_hex\" } ] }",
+            )
+        })?;
+        for key in &registry.keys {
+            if key.owner.trim().is_empty() {
+                return Err(Fault::new(
+                    format!(
+                        "registered key {} names no owner",
+                        key.public_key_hex.chars().take(16).collect::<String>()
+                    ),
+                    "name the owner on every registry entry; an anonymous trust root cannot be audited or revoked",
+                ));
+            }
+            if parse_vk(&key.public_key_hex).is_none() {
+                return Err(Fault::new(
+                    format!(
+                        "registered key for {} is not a valid ed25519 public key",
+                        key.owner
+                    ),
+                    "fix or remove the entry; a corrupt registry is refused whole rather than silently trusting fewer keys",
+                ));
+            }
+        }
+        Ok(registry)
+    }
+
+    /// The key material in the form `SkillManifest::resolve` consumes.
+    pub fn key_hexes(&self) -> Vec<String> {
+        self.keys.iter().map(|k| k.public_key_hex.clone()).collect()
+    }
+}
+
 /// Delegation: a sub-agent may hold only capabilities the parent holds and the
 /// skill's scope names. Scope can narrow, never widen; a skill asking for a
 /// capability the parent lacks is refused. Returns the granted set.
@@ -344,6 +404,56 @@ mod tests {
         // not downgraded to unsigned.
         let err = signed.resolve(&dir, &[]).unwrap_err();
         assert!(err.cause.contains("no registered key verifies"), "{err}");
+    }
+
+    #[test]
+    fn a_registry_with_a_corrupt_key_or_anonymous_entry_refuses_whole() {
+        let dir = pkg("registry");
+        let path = dir.join("skill-keys.json");
+
+        std::fs::write(
+            &path,
+            r#"{"keys": [{"owner": "user:mariano@local", "public_key_hex": "not-hex"}]}"#,
+        )
+        .unwrap();
+        let err = KeyRegistry::load(&path).unwrap_err();
+        assert!(err.cause.contains("not a valid ed25519"), "{err}");
+
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"keys": [{{"owner": "  ", "public_key_hex": "{}"}}]}}"#,
+                hex::encode(
+                    SigningKey::from_bytes(&[7u8; 32])
+                        .verifying_key()
+                        .as_bytes()
+                )
+            ),
+        )
+        .unwrap();
+        let err = KeyRegistry::load(&path).unwrap_err();
+        assert!(err.cause.contains("names no owner"), "{err}");
+    }
+
+    #[test]
+    fn a_signed_skill_resolves_against_the_managed_registry() {
+        let dir = pkg("managedreg");
+        write_steps(&dir, &["checkout", "scan"]);
+        let seed = "33".repeat(32);
+        let signed = manifest().signed_with(&seed).unwrap();
+        let sk = SigningKey::from_bytes(&hex::decode(&seed).unwrap().try_into().unwrap());
+        let path = dir.join("skill-keys.json");
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"keys": [{{"owner": "user:mariano@local", "public_key_hex": "{}"}}]}}"#,
+                hex::encode(sk.verifying_key().as_bytes())
+            ),
+        )
+        .unwrap();
+        let registry = KeyRegistry::load(&path).unwrap();
+        let r = signed.resolve(&dir, &registry.key_hexes()).unwrap();
+        assert!(r.signature_state.starts_with("verified:"));
     }
 
     #[test]

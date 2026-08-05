@@ -75,8 +75,15 @@ work item, and `gantry scan` on this repo is expected to report it.
   rather than downgraded to unsigned. — enforced since slice 09 by
   `src/skills.rs` (`SkillManifest::resolve`); exercised by `tests/skills.rs`
   and `docs/proof/09.md`. Delegation can only narrow scope, never widen it.
-  The gap: the key registry is passed per call, not yet a managed store. —
-  `[UNENFORCED]` `ci/skill-key-registry`
+  The key registry is a managed store since the post-nine gap work:
+  `config/skill-keys.json` is the tracked trust root, loaded by
+  `KeyRegistry::load` (`src/skills.rs`), which refuses the whole registry on
+  a corrupt key or an entry with no owner rather than silently trusting
+  fewer keys. `gantry skill resolve` reads it by default; a key passed on
+  the command line is added for one resolution, never a replacement. —
+  enforced by `src/skills.rs` tests
+  (`a_registry_with_a_corrupt_key_or_anonymous_entry_refuses_whole`,
+  `a_signed_skill_resolves_against_the_managed_registry`)
 - **A rung is derived, never stored.** The rung a capability holds is
   replayed from the ledger's `capability.run` and `rung.change` events, so a
   third party recomputes it from the signed record; promotion needs the

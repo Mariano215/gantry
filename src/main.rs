@@ -586,16 +586,25 @@ tr.good{{background:#e6f4ea}}tr.ok{{background:#fff8e1}}tr.low{{background:#fdec
 /// manifest, a missing step, or an unverifiable signature is refused here, at
 /// resolve time, before any run consumes the skill. The refusal is on the
 /// record too.
-fn skill_resolve(ledger_dir: &str, package_dir: &str, registry: &[String]) -> Result<i32, Fault> {
+fn skill_resolve(ledger_dir: &str, package_dir: &str, extra_keys: &[String]) -> Result<i32, Fault> {
     let pkg = Path::new(package_dir);
     let manifest = SkillManifest::load(&pkg.join("skill.json"))?;
+    // The managed registry is the tracked trust root; a key passed on the
+    // command line is added to it for one resolution, not a replacement.
+    let registry_path = Path::new("config/skill-keys.json");
+    let mut registry: Vec<String> = if registry_path.exists() {
+        gantry::skills::KeyRegistry::load(registry_path)?.key_hexes()
+    } else {
+        Vec::new()
+    };
+    registry.extend_from_slice(extra_keys);
     let dir = Path::new(ledger_dir);
     let mut ledger = if dir.join("events.jsonl").exists() {
         Ledger::open(dir)?
     } else {
         Ledger::init(dir)?
     };
-    let outcome = manifest.resolve(pkg, registry);
+    let outcome = manifest.resolve(pkg, &registry);
     let (verdict, reason, subject) = match &outcome {
         Ok(resolved) => ("resolved", None, resolved.subject()),
         Err(fault) => (

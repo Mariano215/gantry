@@ -10,22 +10,22 @@ L=$WORK/ledger
 SRC=docs/proof/fixtures/skill-repo-audit
 PKG=$WORK/skill-repo-audit
 cp -R $SRC $PKG
-PUB=$(cat docs/proof/fixtures/skill-repo-audit.pub)
 echo "workdir: $WORK"
-echo "registered signing key: $PUB"
+echo "managed key registry: config/skill-keys.json"
+jq -c '.keys[] | {owner, key: .public_key_hex[0:16]}' config/skill-keys.json
 
 last_subject() {
   H=$(jq -rs "[.[] | select(.kind==\"skill.resolve\")] | last | .subject_hash" $L/events.jsonl | sed 's/^sha256://')
   cat $L/payloads/$H.json
 }
 
-echo "== the signed skill resolves and verifies =="
-$BIN skill resolve $L $PKG $PUB
+echo "== the signed skill resolves against the managed registry, no key passed =="
+$BIN skill resolve $L $PKG
 last_subject | jq -c '{id, verdict, signature_state, scope}'
 
 echo "== attack 1: break the metadata (empty description) =="
 jq '.description = ""' $PKG/skill.json > $PKG/skill.tmp && mv $PKG/skill.tmp $PKG/skill.json
-if $BIN skill resolve $L $PKG $PUB; then
+if $BIN skill resolve $L $PKG; then
   echo "BROKEN SKILL PUBLISHED"; exit 1
 else
   echo "refused, exit=$?"
@@ -36,7 +36,7 @@ cp $SRC/skill.json $PKG/skill.json
 
 echo "== attack 2: delete a step the skill references =="
 rm $PKG/steps/scan.md
-if $BIN skill resolve $L $PKG $PUB; then
+if $BIN skill resolve $L $PKG; then
   echo "SKILL WITH A DANGLING STEP PUBLISHED"; exit 1
 else
   echo "refused at resolve time, before any run, exit=$?"
@@ -46,7 +46,7 @@ cp $SRC/steps/scan.md $PKG/steps/scan.md
 
 echo "== attack 3: the signature no longer verifies after tampering =="
 jq '.description = "a different skill wearing the same signature"' $PKG/skill.json > $PKG/skill.tmp && mv $PKG/skill.tmp $PKG/skill.json
-if $BIN skill resolve $L $PKG $PUB; then
+if $BIN skill resolve $L $PKG; then
   echo "TAMPERED SKILL PUBLISHED"; exit 1
 else
   echo "tampered signature refused, not downgraded to unsigned, exit=$?"
