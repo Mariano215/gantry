@@ -106,9 +106,17 @@ work item, and `gantry scan` on this repo is expected to report it.
   evaluation time, not continuously, so a sensor that rots between runs is
   caught on next use, not immediately. — `[UNENFORCED]` `ci/sensor-liveness-schedule`
 - **An attestation is verified or declared unverified, never assumed.** The
-  ledger verifier checks actor attestations against a registered key once a
-  key registry exists; until then it counts them and says so in every report.
-  See `docs/proof/01.md` section 6. — `[UNENFORCED]` `ci/attestation-verify`
+  ledger verifier checks actor attestations against registered keys: an
+  attestation under a registered key id is verified (a failure is a fault,
+  naming forgery or alteration), one under an unregistered key id is counted
+  and reported unverified, never silently passed. The registry is
+  `config/actor-keys.json`, same loader and refusal rules as the skill key
+  registry. See `docs/proof/01.md` section 6. — enforced since the post-nine
+  gap work by `ledger::verify_with_actor_keys`; exercised by
+  `tests/ledger.rs` (`attestations_verify_against_a_registered_key_or_are_counted`,
+  `a_forged_attestation_under_a_registered_key_is_a_fault`). The remaining
+  gap: no producer emits attestations yet (the laptop profile default is
+  null), so the checked path is exercised by tests, not by runs.
 
 ## Code standards
 

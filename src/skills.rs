@@ -299,12 +299,16 @@ impl Resolved {
     }
 }
 
-fn parse_vk(hex_str: &str) -> Option<VerifyingKey> {
+/// Parse a hex-encoded ed25519 public key. Shared with the ledger verifier,
+/// which checks actor attestations against the same registry format.
+pub fn parse_vk(hex_str: &str) -> Option<VerifyingKey> {
     let bytes: [u8; 32] = hex::decode(hex_str.trim()).ok()?.try_into().ok()?;
     VerifyingKey::from_bytes(&bytes).ok()
 }
 
-fn key_id_for(vk: &VerifyingKey) -> String {
+/// The key id a public key resolves to: `ed25519:` plus the first 16 hex
+/// chars of the SHA-256 of the key bytes.
+pub fn key_id_for(vk: &VerifyingKey) -> String {
     let digest = sha2::Sha256::digest(vk.as_bytes());
     format!("ed25519:{}", &hex::encode(digest)[..16])
 }

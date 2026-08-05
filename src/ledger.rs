@@ -52,10 +52,12 @@ pub struct EntryFault {
 pub struct VerifyReport {
     pub entries: usize,
     pub faults: Vec<EntryFault>,
-    /// Attestations present in the log that this verifier did not check.
-    /// Actor key distribution does not exist yet, so a clean report must say
-    /// out loud that these were counted, not validated.
+    /// Attestations present in the log whose key id no registered key
+    /// matches. A clean report must say out loud that these were counted,
+    /// not validated.
     pub attestations_unverified: usize,
+    /// Attestations checked against a registered actor key and found good.
+    pub attestations_verified: usize,
 }
 
 impl VerifyReport {
@@ -463,6 +465,15 @@ fn verify_head_sig(head: &SignedHead, vk: &VerifyingKey) -> Result<(), Fault> {
 /// Full verification from the files alone. Every fault names the entry and
 /// the divergence, because the reader repairing this is an agent.
 pub fn verify(dir: &Path) -> Result<VerifyReport, Fault> {
+    verify_with_actor_keys(dir, &[])
+}
+
+/// Full verification with an actor key registry. An attestation whose key id
+/// resolves to a registered key is checked and a failure is a fault; one
+/// whose key id no registered key matches is counted unverified and the
+/// report says so, because a partial registry must not turn "unchecked" into
+/// "clean".
+pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<VerifyReport, Fault> {
     let mut report = VerifyReport::default();
     let events = fs::read_to_string(dir.join("events.jsonl")).map_err(io_fault(dir))?;
     let pub_hex = fs::read_to_string(dir.join("keys/ledger.pub")).map_err(io_fault(dir))?;
@@ -629,14 +640,49 @@ pub fn verify(dir: &Path) -> Result<VerifyReport, Fault> {
         });
     }
 
-    // Attestations: counted, not validated. There is no actor key registry
-    // yet, so pretending to check them would be worse than saying they were
-    // not checked. The count travels in the report.
-    report.attestations_unverified = envelopes
+    // Attestations: checked against the registry where a key id matches;
+    // counted unverified where none does. A registered key that fails to
+    // verify is a fault, not a count: the actor either signed different
+    // bytes or someone forged the attestation.
+    let registered: Vec<(String, ed25519_dalek::VerifyingKey)> = actor_keys
         .iter()
-        .flatten()
-        .filter(|e| e.attestation.is_some())
-        .count();
+        .filter_map(|hex_key| {
+            crate::skills::parse_vk(hex_key).map(|vk| (crate::skills::key_id_for(&vk), vk))
+        })
+        .collect();
+    for (i, env) in envelopes.iter().enumerate() {
+        let Some(env) = env else { continue };
+        let Some(att) = &env.attestation else { continue };
+        let key_id = att["key_id"].as_str().unwrap_or("");
+        let Some((_, vk)) = registered.iter().find(|(id, _)| id == key_id) else {
+            report.attestations_unverified += 1;
+            continue;
+        };
+        let sig = att["value"]
+            .as_str()
+            .and_then(|v| hex::decode(v).ok())
+            .and_then(|b| b.try_into().ok())
+            .map(|b: [u8; 64]| ed25519_dalek::Signature::from_bytes(&b));
+        let verified = match (&sig, env.attestation_bytes()) {
+            (Some(sig), Ok(msg)) => vk.verify(&msg, sig).is_ok(),
+            _ => false,
+        };
+        if verified {
+            report.attestations_verified += 1;
+        } else {
+            report.faults.push(EntryFault {
+                index: Some(i),
+                id: Some(env.id.clone()),
+                fault: Fault::new(
+                    format!(
+                        "entry {i} (id {}) carries an attestation under registered key {key_id} that does not verify",
+                        env.id
+                    ),
+                    "the envelope was altered after signing, or the attestation was forged; restore the entry from a replica or revoke the key",
+                ),
+            });
+        }
+    }
 
     // Payloads: present means hash must match; absent means an on-record
     // retention.expire must cover it.

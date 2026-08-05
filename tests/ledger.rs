@@ -1,4 +1,5 @@
-use gantry::event::NewEvent;
+use ed25519_dalek::{Signer, SigningKey};
+use gantry::event::{Envelope, NewEvent};
 use gantry::ledger::{self, Ledger};
 use serde_json::json;
 use std::fs;
@@ -42,6 +43,78 @@ fn build(name: &str, n: u64) -> (PathBuf, Ledger) {
             .unwrap();
     }
     (dir, l)
+}
+
+/// An event with a real actor attestation over the schema's signing bytes.
+fn attested_ev(seq: u64, sk: &SigningKey) -> NewEvent {
+    let mut e = ev(seq, "tool.request", json!({"tool_id":"Read","n":seq}));
+    let stub = Envelope {
+        v: 2,
+        id: e.id.clone(),
+        run_id: e.run_id.clone(),
+        parent_id: None,
+        seq: e.seq,
+        ts: e.ts.clone(),
+        kind: e.kind.clone(),
+        actor: e.actor.clone(),
+        authority: e.authority.clone(),
+        subject_hash: gantry::event::subject_hash(&e.subject).unwrap(),
+        redacted: vec![],
+        prev_hash: None,
+        attestation: None,
+    };
+    let sig = sk.sign(&stub.attestation_bytes().unwrap());
+    e.attestation = Some(json!({
+        "alg": "ed25519",
+        "key_id": gantry::skills::key_id_for(&sk.verifying_key()),
+        "value": hex::encode(sig.to_bytes()),
+    }));
+    e
+}
+
+/// ci/attestation-verify: a registered key checks the attestation; no
+/// registry counts it unverified and says so; it never silently passes.
+#[test]
+fn attestations_verify_against_a_registered_key_or_are_counted() {
+    let dir = temp_dir("attest");
+    let mut l = Ledger::init(&dir).unwrap();
+    let sk = SigningKey::from_bytes(&[9u8; 32]);
+    l.append(attested_ev(1, &sk)).unwrap();
+    let pub_hex = hex::encode(sk.verifying_key().as_bytes());
+
+    let report = ledger::verify_with_actor_keys(&dir, std::slice::from_ref(&pub_hex)).unwrap();
+    assert!(report.ok(), "faults: {:?}", report.faults);
+    assert_eq!(report.attestations_verified, 1);
+    assert_eq!(report.attestations_unverified, 0);
+
+    let report = ledger::verify(&dir).unwrap();
+    assert!(report.ok());
+    assert_eq!(report.attestations_verified, 0);
+    assert_eq!(report.attestations_unverified, 1, "unchecked is counted, not clean");
+}
+
+/// A forged attestation under a registered key id is a fault, not a count.
+#[test]
+fn a_forged_attestation_under_a_registered_key_is_a_fault() {
+    let dir = temp_dir("attest-forged");
+    let mut l = Ledger::init(&dir).unwrap();
+    let sk = SigningKey::from_bytes(&[9u8; 32]);
+    let mut e = ev(1, "tool.request", json!({"x": 1}));
+    let sig = sk.sign(b"entirely different bytes");
+    e.attestation = Some(json!({
+        "alg": "ed25519",
+        "key_id": gantry::skills::key_id_for(&sk.verifying_key()),
+        "value": hex::encode(sig.to_bytes()),
+    }));
+    l.append(e).unwrap();
+    let pub_hex = hex::encode(sk.verifying_key().as_bytes());
+    let report = ledger::verify_with_actor_keys(&dir, &[pub_hex]).unwrap();
+    assert!(!report.ok(), "a forged attestation must fault");
+    assert!(
+        report.faults.iter().any(|f| f.fault.cause.contains("does not verify")),
+        "faults: {:?}",
+        report.faults
+    );
 }
 
 #[test]

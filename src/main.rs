@@ -84,11 +84,23 @@ fn run() -> Result<i32, Fault> {
             Ok(0)
         }
         ["ledger", "verify", dir] => {
-            let report = ledger::verify(Path::new(dir))?;
+            let keys_path = Path::new("config/actor-keys.json");
+            let actor_keys: Vec<String> = if keys_path.exists() {
+                gantry::skills::KeyRegistry::load(keys_path)?.key_hexes()
+            } else {
+                Vec::new()
+            };
+            let report = ledger::verify_with_actor_keys(Path::new(dir), &actor_keys)?;
             println!("entries: {}", report.entries);
+            if report.attestations_verified > 0 {
+                println!(
+                    "attestations verified against config/actor-keys.json: {}",
+                    report.attestations_verified
+                );
+            }
             if report.attestations_unverified > 0 {
                 println!(
-                    "attestations present but not verified: {} (no actor key registry yet)",
+                    "attestations present but not verified: {} (no registered actor key matches their key id; register it in config/actor-keys.json)",
                     report.attestations_unverified
                 );
             }

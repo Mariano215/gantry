@@ -62,4 +62,22 @@ impl Envelope {
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Fault> {
         jcs_bytes(self)
     }
+
+    /// The bytes an actor attestation signs, per docs/EVENT-SCHEMA.md: the
+    /// fields the actor controls, JCS-canonicalised. `prev_hash` is excluded
+    /// because the ledger assigns it at append; the attestation itself is
+    /// excluded because signing it would be circular.
+    pub fn attestation_bytes(&self) -> Result<Vec<u8>, Fault> {
+        jcs_bytes(&serde_json::json!({
+            "id": self.id,
+            "run_id": self.run_id,
+            "seq": self.seq,
+            "ts": self.ts,
+            "kind": self.kind,
+            "actor": self.actor,
+            "authority": self.authority,
+            "subject_hash": self.subject_hash,
+            "redacted": self.redacted,
+        }))
+    }
 }
