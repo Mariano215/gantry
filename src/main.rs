@@ -308,8 +308,8 @@ fn run() -> Result<i32, Fault> {
         ["graph", "compare", graph_path, symbol, files @ ..] if !files.is_empty() => {
             graph_compare(graph_path, symbol, files)
         }
-        ["console", ledger_dir] => console_serve(ledger_dir, "127.0.0.1:0"),
-        ["console", ledger_dir, addr] => console_serve(ledger_dir, addr),
+        ["console", ledger_dir] => gantry::console::serve(ledger_dir, "127.0.0.1:0"),
+        ["console", ledger_dir, addr] => gantry::console::serve(ledger_dir, addr),
         ["score", ledger_dir] => score(ledger_dir, "config/scoring.json", None),
         ["score", ledger_dir, rules] => score(ledger_dir, rules, None),
         ["score", ledger_dir, rules, console] => score(ledger_dir, rules, Some(console)),
@@ -586,7 +586,7 @@ fn score(ledger_dir: &str, rules_path: &str, console: Option<&str>) -> Result<i3
     })?;
 
     if let Some(path) = console {
-        fs::write(path, console_html(&snapshot)).map_err(|e| {
+        fs::write(path, gantry::console::scorecard_html(&snapshot)).map_err(|e| {
             Fault::new(
                 format!("cannot write console {path}: {e}"),
                 "check the directory is writable",
@@ -595,74 +595,6 @@ fn score(ledger_dir: &str, rules_path: &str, console: Option<&str>) -> Result<i3
         println!("\nconsole written to {path}");
     }
     Ok(0)
-}
-
-/// Serve the console over loopback: score the ledger, render the static
-/// asset, and answer every GET with it. One process, one handler, stdlib
-/// only; re-scored per request so the page is the ledger's current state.
-/// Loopback by default; an operator exposing it further does so explicitly.
-fn console_serve(ledger_dir: &str, addr: &str) -> Result<i32, Fault> {
-    let listener = std::net::TcpListener::bind(addr).map_err(|e| {
-        Fault::new(
-            format!("cannot bind {addr}: {e}"),
-            "use 127.0.0.1:0 for an ephemeral loopback port, or free the port",
-        )
-    })?;
-    let bound = listener
-        .local_addr()
-        .map(|a| a.to_string())
-        .unwrap_or_else(|_| addr.to_string());
-    println!("console at http://{bound}/ (ctrl-c to stop)");
-    for stream in listener.incoming() {
-        let Ok(mut stream) = stream else { continue };
-        // Drain the request line; every path gets the console.
-        let mut buf = [0u8; 1024];
-        let _ = std::io::Read::read(&mut stream, &mut buf);
-        let scoring = Scoring::load(Path::new("config/scoring.json"))?;
-        let ledger = Ledger::open(Path::new(ledger_dir))?;
-        let events = ledger.events_with_subjects()?;
-        let body = console_html(&scoring.score(&events));
-        let response = format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
-    }
-    Ok(0)
-}
-
-/// A self-contained static console. The plan's UI is static assets the binary
-/// serves; this is that asset, generated from the snapshot.
-fn console_html(snapshot: &gantry::scorer::ScoreSnapshot) -> String {
-    let overall = snapshot
-        .overall
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "N/A".into());
-    let mut rows = String::new();
-    for p in &snapshot.scores {
-        let (score, cls) = match p.score {
-            Some(n) if n >= 4 => (n.to_string(), "good"),
-            Some(n) if n >= 3 => (n.to_string(), "ok"),
-            Some(n) => (n.to_string(), "low"),
-            None => ("N/A".to_string(), "na"),
-        };
-        rows.push_str(&format!(
-            "<tr class=\"{cls}\"><td>{:02}</td><td>{}</td><td class=\"score\">{score}</td><td>{}</td></tr>\n",
-            p.primitive, p.name, p.evidence
-        ));
-    }
-    format!(
-        "<!doctype html><meta charset=utf-8><title>Gantry conformance</title>\
-<style>body{{font:15px system-ui;margin:2rem;max-width:60rem}}table{{border-collapse:collapse;width:100%}}\
-td,th{{border:1px solid #ccc;padding:.4rem .6rem;text-align:left}}.score{{font-weight:700;text-align:center}}\
-tr.good{{background:#e6f4ea}}tr.ok{{background:#fff8e1}}tr.low{{background:#fdecea}}tr.na{{color:#888}}\
-.overall{{font-size:1.4rem;margin:1rem 0}}</style>\
-<h1>Gantry conformance, scored from its own telemetry</h1>\
-<p class=overall><b>Overall level: {overall}</b> (the minimum across scored primitives, not the average)</p>\
-<table><tr><th>#</th><th>Primitive</th><th>Score</th><th>Evidence</th></tr>\n{rows}</table>\
-<p>Rules {}, {} events scored. Overall is the minimum by rule: one weak layer caps the whole.</p>",
-        snapshot.rules_version, snapshot.events_scored
-    )
 }
 
 /// Resolve a skill package and record the verdict on the ledger. A broken
