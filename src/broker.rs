@@ -297,7 +297,16 @@ impl BrokerRun {
                 "credential_handles": credential_handles,
             }),
         )?;
-        let decision = self.policy.decide(&call, &self.identity)?;
+        // Gate on the rung the capability has earned, replayed from the
+        // ledger's capability.run and rung.change history, not the static
+        // rung the policy asserts. A demotion recorded by the orchestrator
+        // therefore tightens this gate on the very next call.
+        let history = self.core.replayable_events()?;
+        let decision = self
+            .policy
+            .decide_with_earned(&call, &self.identity, &|cap_id, declared| {
+                crate::trust::TrustState::replay(&history, cap_id, declared).rung
+            })?;
         let verdict = decision.verdict;
         let obligation = decision.obligation.clone();
         let message = decision.message.clone();

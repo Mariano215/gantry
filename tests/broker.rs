@@ -276,6 +276,52 @@ fn unregistered_tool_never_reaches_the_policy() {
     );
 }
 
+/// ci/gate-uses-earned-rung: a demotion on the ledger tightens the broker's
+/// gate on the next call. shell.exec declares autonomous (gate post for
+/// write.local); after a recorded demotion to led, the same call holds pre,
+/// and the decision records the earned rung, not the declared one.
+#[test]
+fn broker_gates_on_the_earned_rung_not_the_declared_one() {
+    let dir = workdir("earned-rung");
+    let led = dir.join("ledger-earned-rung");
+    let mut ledger = Ledger::init(&led).unwrap();
+    ledger
+        .append(gantry::event::NewEvent {
+            id: "demote-0".into(),
+            run_id: "run-orch".into(),
+            parent_id: None,
+            seq: 0,
+            ts: gantry::gateway::rfc3339_now(),
+            kind: "rung.change".into(),
+            actor: json!({"type": "system", "id": "system:orchestrator", "identity_source": "local", "rung": null}),
+            authority: json!({}),
+            subject: json!({"capability": "shell.exec", "from": "autonomous", "to": "led", "trigger": "demotion", "approver": null}),
+            redacted: vec![],
+            attestation: None,
+        })
+        .unwrap();
+    let mut run = BrokerRun::open(
+        Ledger::open(&led).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    let fault = run.call("Bash", "echo demoted").unwrap_err();
+    run.seal("complete").unwrap();
+    assert!(fault.cause.contains("held"), "{fault}");
+    let evs = events(&led);
+    let decision_env = evs
+        .iter()
+        .find(|e| e["kind"] == json!("policy.decision"))
+        .unwrap();
+    let decision = subject(&led, decision_env);
+    assert_eq!(decision["rung"], "led", "the earned rung gates, not the declared autonomous");
+    assert_eq!(decision["gate"], "pre");
+    assert_eq!(decision["verdict"], "hold");
+}
+
 /// ci/policy-host-parity, run against the tracked host settings: every deny
 /// entry the host can short-circuit resolves to deny or hold here.
 #[test]

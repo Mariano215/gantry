@@ -83,9 +83,13 @@ work item, and `gantry scan` on this repo is expected to report it.
   clean-run threshold and a permitted approver, demotion is automatic on the
   next failure. — enforced since slice 06 by `src/trust.rs`
   (`TrustState::replay`, `Orchestrator::step`); exercised by `tests/trust.rs`
-  and `docs/proof/06.md`. The gap: the derived rung is not yet consulted by
-  the broker's gate, which still reads the static capability rung from the
-  policy. — `[UNENFORCED]` `ci/gate-uses-earned-rung`
+  and `docs/proof/06.md`. Since the post-nine gap work the broker's gate
+  consults the derived rung: every `BrokerRun::call` replays trust history
+  and gates through `Policy::decide_with_earned`, so a recorded demotion
+  tightens the gate on the very next call; an earned promotion whose gate
+  would become post without a declared rollback degrades to pre instead. —
+  enforced by `tests/broker.rs`
+  (`broker_gates_on_the_earned_rung_not_the_declared_one`)
 - **A sensor that cannot fail is broken, not clean.** Every sensor declares a
   negative control it must reject; a sensor that passes its own negative
   control is reported as `broken`, never as a clean pass, so a green board of

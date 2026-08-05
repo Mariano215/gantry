@@ -293,8 +293,22 @@ impl Policy {
         Ok(())
     }
 
-    /// One call, one evaluation, one decision. Pure and total.
+    /// One call, one evaluation, one decision. Pure and total. Gates on the
+    /// capability's declared rung; the broker passes the earned rung via
+    /// `decide_with_earned`.
     pub fn decide(&self, call: &CallRequest, identity: &Value) -> Result<Decision, Fault> {
+        self.decide_with_earned(call, identity, &|_, declared| declared)
+    }
+
+    /// Like `decide`, but the rung that gates is `earned(capability_id,
+    /// declared_rung)`, so a caller holding ledger history gates on the rung
+    /// the capability has actually earned, not the one the policy asserts.
+    pub fn decide_with_earned(
+        &self,
+        call: &CallRequest,
+        identity: &Value,
+        earned: &dyn Fn(&str, Rung) -> Rung,
+    ) -> Result<Decision, Fault> {
         let request = json!({
             "tool": call.tool,
             "args_hash": subject_hash(&call.args)?,
@@ -350,7 +364,16 @@ impl Policy {
                 });
             }
         };
-        let g = gate(cap.rung, cap.effect);
+        let rung = earned(&cap.id, cap.rung);
+        let g = gate(rung, cap.effect);
+        // An earned promotion can move a gate to post, but post-hoc review
+        // without a rollback handle is the thing Policy::validate refuses at
+        // load; at runtime the same rule degrades the gate to pre instead.
+        let g = if g == Gate::Post && cap.rollback.is_none() {
+            Gate::Pre
+        } else {
+            g
+        };
         let verdict = match rule.action {
             Action::Deny => Action::Deny,
             Action::Hold => Action::Hold,
@@ -366,7 +389,7 @@ impl Policy {
             Action::Deny => rule.message.clone(),
             Action::Hold => Some(rule.message.clone().unwrap_or_else(|| format!(
                 "This call gates pre at rung {} for effect {} and needs an approval event before it can proceed. Ask a human approver, or lower the ambition of the call to a capability with a lower gate.",
-                cap.rung.schema_name(), cap.effect.schema_name()
+                rung.schema_name(), cap.effect.schema_name()
             ))),
             Action::Allow => None,
         };
@@ -374,7 +397,7 @@ impl Policy {
             verdict,
             capability: Some(cap.id.clone()),
             rule: rule.id.clone(),
-            rung: Some(cap.rung),
+            rung: Some(rung),
             effect: Some(cap.effect),
             gate: Some(g),
             obligation,
