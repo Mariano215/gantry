@@ -240,3 +240,62 @@ fn connection_refused_is_a_ledger_event() {
     assert_eq!(subject["outcome"], "error");
     assert!(subject["error"]["fix"].as_str().unwrap().contains("base_url"));
 }
+
+fn sorted_keys(v: &serde_json::Value) -> Vec<String> {
+    let mut k: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+    k.sort();
+    k
+}
+
+/// The slice 02 claim in miniature: two providers, one envelope shape and one
+/// model.call subject shape. The three-environment version is the proof run.
+#[test]
+fn envelope_shape_identical_across_providers() {
+    let dir = workdir("shape");
+    let pin = pinning(&dir);
+    let mut shapes = Vec::new();
+    for name in ["alpha", "beta"] {
+        let (base, _srv) = stub(200, OK_BODY);
+        let led = dir.join(format!("ledger-{name}"));
+        let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+        run.call(&provider(&base, name, None), &[msg("user", "hello")]).unwrap();
+        run.seal("complete").unwrap();
+        let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+        let env: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
+        shapes.push((sorted_keys(&env), sorted_keys(&read_subject(&led, 1))));
+    }
+    assert_eq!(shapes[0], shapes[1], "same envelope keys and same subject keys");
+}
+
+#[test]
+fn key_bytes_never_reach_the_ledger() {
+    let dir = workdir("keyleak");
+    let pin = pinning(&dir);
+    let canary = "sk-canary-8c2f1a9d7e";
+    std::env::set_var("GANTRY_TEST_CANARY_KEY", canary);
+    let (base, srv) = stub(200, OK_BODY);
+    let led = dir.join("ledger");
+    let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    run.call(&provider(&base, "stub", Some("GANTRY_TEST_CANARY_KEY")), &[msg("user", "hello")]).unwrap();
+    run.seal("complete").unwrap();
+    let req = String::from_utf8(srv.join().unwrap()).unwrap();
+    assert!(req.contains(&format!("Bearer {canary}")), "wire contains Bearer token");
+
+    fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files_under(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    files_under(&led, &mut files);
+    assert!(!files.is_empty());
+    for f in files {
+        let text = fs::read_to_string(&f).unwrap_or_default();
+        assert!(!text.contains(canary), "key bytes found in {}", f.display());
+    }
+}
