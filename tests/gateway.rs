@@ -106,6 +106,13 @@ fn provider(base_url: &str, name: &str, key_env: Option<&str>) -> Provider {
 
 const OK_BODY: &str = r#"{"choices":[{"message":{"role":"assistant","content":"stub answer"}}],"usage":{"prompt_tokens":42,"completion_tokens":7}}"#;
 
+fn read_subject(led: &Path, line: usize) -> serde_json::Value {
+    let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+    let env: serde_json::Value = serde_json::from_str(lines.lines().nth(line).unwrap()).unwrap();
+    let hex_part = env["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
+    serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{hex_part}.json"))).unwrap()).unwrap()
+}
+
 #[test]
 fn call_appends_model_call_event() {
     let dir = workdir("call-ok");
@@ -209,4 +216,37 @@ fn provider_error_never_leaks_the_key_onto_the_ledger() {
         let text = fs::read_to_string(&f).unwrap_or_default();
         assert!(!text.contains(sentinel), "sentinel leaked into {}", f.display());
     }
+}
+
+#[test]
+fn http_500_is_a_ledger_event() {
+    let dir = workdir("call-500");
+    let pin = pinning(&dir);
+    let (base, _srv) = stub(500, r#"{"error":"boom"}"#);
+    let led = dir.join("ledger");
+    let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    let fault = run.call(&provider(&base, "stub", None), &[msg("user", "hi")]).unwrap_err();
+    run.seal("failed").unwrap();
+    assert!(fault.cause.contains("on the ledger"), "{fault}");
+    let subject = read_subject(&led, 1);
+    assert_eq!(subject["outcome"], "error");
+    assert!(subject["error"]["cause"].as_str().unwrap().contains("500"));
+    assert!(!subject["error"]["fix"].as_str().unwrap().is_empty());
+    assert!(gantry::ledger::verify(&led).unwrap().ok());
+}
+
+#[test]
+fn connection_refused_is_a_ledger_event() {
+    let dir = workdir("call-refused");
+    let pin = pinning(&dir);
+    // Bind then drop, so the port exists but nothing listens.
+    let port = { std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() };
+    let led = dir.join("ledger");
+    let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    let p = provider(&format!("http://127.0.0.1:{port}/v1"), "stub", None);
+    run.call(&p, &[msg("user", "hi")]).unwrap_err();
+    run.seal("failed").unwrap();
+    let subject = read_subject(&led, 1);
+    assert_eq!(subject["outcome"], "error");
+    assert!(subject["error"]["fix"].as_str().unwrap().contains("base_url"));
 }
