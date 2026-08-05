@@ -30,6 +30,9 @@ const USAGE: &str = "usage:
   gantry ledger prove <dir> <index>
   gantry ledger verify-inclusion <bundle.json> <pubkey-file>
   gantry ledger consistency <dir> <m>
+  gantry ledger verify-consistency <bundle.json> <pubkey-file>
+  gantry ledger anchor <dir> <anchor-file>          (outside <dir>)
+  gantry ledger verify-anchor <dir> <anchor-file>
   gantry ledger expire <dir> <subject_hash>         (NewEvent JSON on stdin)
   gantry ledger scan-secrets <dir>                  (values from GANTRY_HANDLE_*)
   gantry run <providers.json> <provider-name> <ledger-dir>
@@ -124,6 +127,18 @@ fn run() -> Result<i32, Fault> {
                     report.attestations_unverified
                 );
             }
+            // A gap is a finding, not a fault: the chain and the signed heads
+            // already fault on an entry that was removed, so a hole in seq is
+            // an event that was never written. The record cannot tell a
+            // harness killed mid-run from a producer that numbered an event it
+            // never appended, and calling the second one an alteration would
+            // be the verifier claiming something it cannot prove.
+            for gap in &report.seq_gaps {
+                println!(
+                    "seq gap in run {}: last seq before the gap {}, next seq after it {}, {} event(s) missing. Fix: this run's record is partial, so read it as evidence of a harness that stopped writing (check the wrapper's exit path and the hook that invokes gantry) rather than as an altered log; the chain and the heads verify, so nothing was removed after append",
+                    gap.run_id, gap.after, gap.before, gap.missing
+                );
+            }
             for f in &report.faults {
                 let index = f
                     .index
@@ -188,8 +203,83 @@ fn run() -> Result<i32, Fault> {
         ["ledger", "consistency", dir, m] => {
             let m = parse_index(m)?;
             let ledger = Ledger::open(Path::new(dir))?;
-            println!("{}", to_json(&ledger.consistency(m)?)?);
+            println!("{}", to_json(&ledger.consistency_bundle(m)?)?);
             Ok(0)
+        }
+        ["ledger", "verify-consistency", bundle_path, key_path] => {
+            let bundle_text = read_file(bundle_path)?;
+            let pub_key = read_file(key_path)?;
+            let bundle: ledger::ConsistencyBundle =
+                serde_json::from_str(&bundle_text).map_err(|e| {
+                    Fault::new(
+                        format!("{bundle_path} does not parse as a consistency bundle: {e}"),
+                        "regenerate it with gantry ledger consistency <dir> <m>",
+                    )
+                })?;
+            match ledger::verify_consistency_bundle(&bundle, &pub_key) {
+                Ok(()) => {
+                    println!(
+                        "consistency verified: the signed head at size {} is a prefix of the signed head at size {}, so no entry at or before {} was rewritten or removed",
+                        bundle.old_head.size, bundle.new_head.size, bundle.old_head.size
+                    );
+                    Ok(0)
+                }
+                Err(fault) => {
+                    println!("{fault}");
+                    Ok(1)
+                }
+            }
+        }
+        ["ledger", "anchor", dir, anchor_path] => {
+            let mut ledger = Ledger::open(Path::new(dir))?;
+            let (head, envelope) = ledger.anchor(Path::new(anchor_path), anchor_event())?;
+            println!(
+                "anchored the signed head at size {} to {anchor_path}, recorded as {} ({})",
+                head.size, envelope.kind, envelope.id
+            );
+            println!(
+                "this detects a later rewrite of entries 0..{} only for a party holding that copy; a copy on the same disk as the ledger is a copy whoever rewrites the log rewrites too",
+                head.size.saturating_sub(1)
+            );
+            Ok(0)
+        }
+        ["ledger", "verify-anchor", dir, anchor_path] => {
+            let anchored: ledger::SignedHead = serde_json::from_str(&read_file(anchor_path)?)
+                .map_err(|e| {
+                    Fault::new(
+                        format!("{anchor_path} does not parse as a signed head: {e}"),
+                        "point at a file written by gantry ledger anchor",
+                    )
+                })?;
+            let ledger_dir = Path::new(dir);
+            let l = Ledger::open(ledger_dir)?;
+            let pub_key = read_file(&ledger_dir.join("keys/ledger.pub").display().to_string())?;
+            if anchored.size > l.size() as u64 {
+                println!(
+                    "the anchored head covers {} entries and the log now holds {}: the log was replaced with a shorter history. Fix: restore the log from a replica; an append-only log never shrinks, and the anchored copy is the evidence of what it held",
+                    anchored.size,
+                    l.size()
+                );
+                return Ok(1);
+            }
+            let bundle = ledger::ConsistencyBundle {
+                proof: l.consistency(anchored.size as usize)?,
+                new_head: l.latest_head()?,
+                old_head: anchored,
+            };
+            match ledger::verify_consistency_bundle(&bundle, &pub_key) {
+                Ok(()) => {
+                    println!(
+                        "anchor verified: the log at size {} is consistent with the head anchored at size {} in {anchor_path}",
+                        bundle.new_head.size, bundle.old_head.size
+                    );
+                    Ok(0)
+                }
+                Err(fault) => {
+                    println!("{fault}");
+                    Ok(1)
+                }
+            }
         }
         ["ledger", "expire", dir, subject_hash] => {
             let mut ledger = Ledger::open(Path::new(dir))?;
@@ -1650,6 +1740,45 @@ fn to_json<T: serde::Serialize>(value: &T) -> Result<String, Fault> {
 fn parse_index(s: &str) -> Result<usize, Fault> {
     s.parse()
         .map_err(|_| usage_fault(format!("{s} is not a non-negative integer")))
+}
+
+/// The envelope fields for a `ledger.anchor`. Anchoring is an operator action
+/// on the log itself: it reads no policy and holds no actor key, so the
+/// authority it cannot observe is written `unobserved` rather than guessed,
+/// and the event is unsigned. `Ledger::anchor` fills in the subject.
+fn anchor_event() -> NewEvent {
+    let run_id = format!(
+        "anchor-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
+    NewEvent {
+        id: format!("{run_id}-0"),
+        run_id,
+        parent_id: None,
+        seq: 0,
+        ts: gantry::gateway::rfc3339_now(),
+        kind: "ledger.anchor".into(),
+        actor: json!({
+            "type": "system",
+            "id": "system:ledger-anchor",
+            "identity_source": "local",
+            "rung": null,
+        }),
+        authority: json!({
+            "profile": "unobserved",
+            "policy_version": "unobserved",
+            "instruction_version": "unobserved",
+            "settings_hash": "unobserved",
+            "permission_mode": "unobserved",
+            "diverged": [],
+        }),
+        subject: json!(null),
+        redacted: Vec::new(),
+        attestation: None,
+    }
 }
 
 fn read_file(path: &str) -> Result<String, Fault> {

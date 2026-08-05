@@ -244,6 +244,193 @@ fn consistency_between_heads_verifies_offline() {
     .unwrap();
 }
 
+/// Rewrite history the way only the log's own writer can: drop the tail of
+/// events.jsonl and heads.jsonl, then append different events under the same
+/// ledger key. The result is internally consistent and verifies clean, which
+/// is exactly the limit an anchored head exists to close.
+fn rewrite_history(dir: &std::path::Path, keep: usize, replacement: u64) -> Ledger {
+    for file in ["events.jsonl", "heads.jsonl"] {
+        let path = dir.join(file);
+        let text = fs::read_to_string(&path).unwrap();
+        let kept: Vec<&str> = text.lines().take(keep).collect();
+        fs::write(&path, kept.join("\n") + "\n").unwrap();
+    }
+    let mut l = Ledger::open(dir).unwrap();
+    for s in 0..replacement {
+        l.append(ev(
+            keep as u64 + s,
+            "tool.request",
+            json!({"rewritten": s, "tool_id":"Read"}),
+        ))
+        .unwrap();
+    }
+    l
+}
+
+/// A gap in one run's seq is reported, named and counted, and it is a finding
+/// rather than a fault: the log is intact, the record is partial.
+#[test]
+fn a_seq_gap_is_reported_per_run_and_is_not_a_fault() {
+    let dir = temp_dir("seq-gap");
+    let mut l = Ledger::init(&dir).unwrap();
+    for s in [0, 1, 2, 5, 6] {
+        l.append(ev(s, "tool.request", json!({"n": s}))).unwrap();
+    }
+    // a second run, contiguous, so a checker that fires on everything fails
+    for s in 0..3 {
+        let mut e = ev(s, "tool.request", json!({"other": s}));
+        e.run_id = "run-02".into();
+        e.id = format!("ev-other-{s}");
+        l.append(e).unwrap();
+    }
+
+    let report = ledger::verify(&dir).unwrap();
+    assert!(
+        report.ok(),
+        "a gap is a finding, not a fault: {:?}",
+        report.faults
+    );
+    assert_eq!(report.seq_gaps.len(), 1, "gaps: {:?}", report.seq_gaps);
+    let gap = &report.seq_gaps[0];
+    assert_eq!(gap.run_id, "run-01");
+    assert_eq!((gap.after, gap.before, gap.missing), (2, 5, 2));
+
+    // and a log with no gap reports none
+    let (clean_dir, _l) = build("seq-nogap", 4);
+    assert!(ledger::verify(&clean_dir).unwrap().seq_gaps.is_empty());
+}
+
+/// The bundle a third party is handed checks out, and the rewrite it exists to
+/// catch does not.
+#[test]
+fn a_consistency_bundle_verifies_offline_and_a_rewrite_is_rejected() {
+    let dir = temp_dir("consistency-bundle");
+    let mut l = Ledger::init(&dir).unwrap();
+    for s in 0..11 {
+        l.append(ev(s, "tool.request", json!({"n": s}))).unwrap();
+    }
+    let pub_hex = fs::read_to_string(dir.join("keys/ledger.pub")).unwrap();
+    let bundle = l.consistency_bundle(4).unwrap();
+    let text = serde_json::to_string(&bundle).unwrap();
+    let parsed: ledger::ConsistencyBundle = serde_json::from_str(&text).unwrap();
+    ledger::verify_consistency_bundle(&parsed, &pub_hex).unwrap();
+
+    // a proof element the log did not produce must not check out
+    let mut tampered = parsed.clone();
+    tampered.proof[0] = format!("sha256:{}", "ab".repeat(32));
+    let err = ledger::verify_consistency_bundle(&tampered, &pub_hex).unwrap_err();
+    assert!(err.to_string().contains("consistency fails"), "{err}");
+
+    // an old head nobody signed must not check out either
+    let mut forged = parsed.clone();
+    forged.old_head.root_hash = format!("sha256:{}", "cd".repeat(32));
+    let err = ledger::verify_consistency_bundle(&forged, &pub_hex).unwrap_err();
+    assert!(err.to_string().contains("signature"), "{err}");
+
+    // the real attack: the writer rewrites its own history and re-signs
+    let kept_old_head = parsed.old_head.clone();
+    let rewritten = rewrite_history(&dir, 3, 8);
+    assert!(
+        ledger::verify(&dir).unwrap().ok(),
+        "the rewritten log verifies clean on its own, which is the point"
+    );
+    let after = ledger::ConsistencyBundle {
+        proof: rewritten.consistency(4).unwrap(),
+        new_head: rewritten.latest_head().unwrap(),
+        old_head: kept_old_head,
+    };
+    let err = ledger::verify_consistency_bundle(&after, &pub_hex).unwrap_err();
+    assert!(err.to_string().contains("consistency fails"), "{err}");
+}
+
+/// An anchor is a copy of a signed head kept where the log's writer is not.
+/// It detects the rewrite that verification alone cannot, and only for whoever
+/// holds the copy.
+#[test]
+fn an_anchored_head_detects_a_rewrite_verification_alone_misses() {
+    let dir = temp_dir("anchor");
+    let anchor_dir = temp_dir("anchor-dest");
+    fs::create_dir_all(&anchor_dir).unwrap();
+    let mut l = Ledger::init(&dir).unwrap();
+    for s in 0..4 {
+        l.append(ev(s, "tool.request", json!({"n": s}))).unwrap();
+    }
+    let dest = anchor_dir.join("head-4.json");
+    let (head, envelope) = l
+        .anchor(&dest, ev(4, "ledger.anchor", json!(null)))
+        .unwrap();
+    assert_eq!(head.size, 4);
+    assert_eq!(envelope.kind, "ledger.anchor");
+
+    let anchored: ledger::SignedHead =
+        serde_json::from_str(&fs::read_to_string(&dest).unwrap()).unwrap();
+    assert_eq!(anchored, head);
+    let subject: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(dir.join("payloads").join(format!(
+            "{}.json",
+            envelope.subject_hash.strip_prefix("sha256:").unwrap()
+        )))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(subject["tree_size"], 4);
+    assert!(subject["does_not_prove"].as_str().unwrap().contains("copy"));
+
+    // honest growth is consistent with the anchor
+    let pub_hex = fs::read_to_string(dir.join("keys/ledger.pub")).unwrap();
+    for s in 5..9 {
+        l.append(ev(s, "tool.request", json!({"n": s}))).unwrap();
+    }
+    let bundle = ledger::ConsistencyBundle {
+        proof: l.consistency(anchored.size as usize).unwrap(),
+        new_head: l.latest_head().unwrap(),
+        old_head: anchored.clone(),
+    };
+    ledger::verify_consistency_bundle(&bundle, &pub_hex).unwrap();
+
+    // a rewrite that verifies clean does not survive the anchored head
+    let rewritten = rewrite_history(&dir, 3, 8);
+    assert!(ledger::verify(&dir).unwrap().ok());
+    let bundle = ledger::ConsistencyBundle {
+        proof: rewritten.consistency(anchored.size as usize).unwrap(),
+        new_head: rewritten.latest_head().unwrap(),
+        old_head: anchored,
+    };
+    let err = ledger::verify_consistency_bundle(&bundle, &pub_hex).unwrap_err();
+    assert!(err.to_string().contains("consistency fails"), "{err}");
+}
+
+/// An anchor the log's writer can rewrite beside the log is not an anchor, and
+/// overwriting the older copy destroys the only evidence it carries.
+#[test]
+fn anchoring_refuses_a_destination_inside_the_ledger_and_refuses_to_overwrite() {
+    let (dir, mut l) = build("anchor-refuse", 3);
+    let inside = dir.join("head.json");
+    let err = l
+        .anchor(&inside, ev(4, "ledger.anchor", json!(null)))
+        .unwrap_err();
+    assert!(err.to_string().contains("inside the ledger"), "{err}");
+    assert!(!inside.exists(), "a refused anchor wrote a file anyway");
+
+    let anchor_dir = temp_dir("anchor-refuse-dest");
+    fs::create_dir_all(&anchor_dir).unwrap();
+    let dest = anchor_dir.join("head.json");
+    l.anchor(&dest, ev(4, "ledger.anchor", json!(null)))
+        .unwrap();
+    let err = l
+        .anchor(&dest, ev(5, "ledger.anchor", json!(null)))
+        .unwrap_err();
+    assert!(err.to_string().contains("already exists"), "{err}");
+
+    let err = l
+        .anchor(
+            &anchor_dir.join("other.json"),
+            ev(6, "tool.request", json!(null)),
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("ledger.anchor"), "{err}");
+}
+
 #[test]
 fn expiry_keeps_the_log_verifiable() {
     let (dir, mut l) = build("expire", 4);

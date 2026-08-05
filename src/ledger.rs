@@ -41,6 +41,30 @@ pub struct InclusionBundle {
     pub head: SignedHead,
 }
 
+/// Everything an offline verifier needs to check that an older signed head is
+/// a prefix of a newer one: both heads and the proof between them. A bare
+/// proof array is not checkable by itself, which is why the producer emits
+/// this instead.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsistencyBundle {
+    pub old_head: SignedHead,
+    pub new_head: SignedHead,
+    pub proof: Vec<String>,
+}
+
+/// A hole in one run's `seq`. The run recorded `after`, then `before`, and
+/// `missing` events that were numbered in between are on no line of the log.
+/// A finding, never a fault: see `docs/proof/18.md` for why the record cannot
+/// tell a killed harness from a producer that numbered an event it never
+/// appended, and why a removed entry faults elsewhere instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SeqGap {
+    pub run_id: String,
+    pub after: u64,
+    pub before: u64,
+    pub missing: u64,
+}
+
 #[derive(Debug)]
 pub struct EntryFault {
     pub index: Option<usize>,
@@ -63,6 +87,9 @@ pub struct VerifyReport {
     /// which run wrote the event, but anyone holding the seed can produce
     /// one, so they are not attribution and no report may imply otherwise.
     pub attestations_under_published_seed: usize,
+    /// Runs whose `seq` skips. Reported and counted, and deliberately not a
+    /// fault, so `ok()` stays a statement about the record's integrity.
+    pub seq_gaps: Vec<SeqGap>,
 }
 
 impl VerifyReport {
@@ -313,6 +340,109 @@ impl Ledger {
         })
     }
 
+    /// The head this ledger signed when it held exactly `size` entries. Every
+    /// append writes one, so a size a head was never written at is an error
+    /// rather than an empty answer.
+    pub fn head_at(&self, size: u64) -> Result<SignedHead, Fault> {
+        let heads =
+            fs::read_to_string(self.dir.join("heads.jsonl")).map_err(io_fault(&self.dir))?;
+        heads
+            .lines()
+            .filter_map(|l| serde_json::from_str::<SignedHead>(l).ok())
+            .find(|h| h.size == size)
+            .ok_or_else(|| {
+                Fault::new(
+                    format!(
+                        "no signed head at size {size}; the ledger holds {} entries",
+                        self.size()
+                    ),
+                    "ask for a size between 1 and the ledger size; every append writes one head, so a missing one means heads.jsonl was truncated and must be restored from a replica",
+                )
+            })
+    }
+
+    /// The proof plus both heads, which is what a third party can actually
+    /// check. `m` is the older tree size.
+    pub fn consistency_bundle(&self, m: usize) -> Result<ConsistencyBundle, Fault> {
+        Ok(ConsistencyBundle {
+            old_head: self.head_at(m as u64)?,
+            new_head: self.latest_head()?,
+            proof: self.consistency(m)?,
+        })
+    }
+
+    /// Copy the current signed head to `dest` and record a `ledger.anchor`
+    /// naming it. The caller supplies the event so the ledger stays free of
+    /// policy; the subject is built here so an anchor event cannot name a head
+    /// that was not written. What this proves is bounded and the payload says
+    /// so: a copy the log's writer can rewrite proves nothing, so the
+    /// destination is refused inside the ledger directory and refused when a
+    /// file is already there, because overwriting an older anchor destroys the
+    /// only thing an anchor is.
+    pub fn anchor(
+        &mut self,
+        dest: &Path,
+        mut ev: NewEvent,
+    ) -> Result<(SignedHead, Envelope), Fault> {
+        if ev.kind != "ledger.anchor" {
+            return Err(Fault::new(
+                format!("anchor submitted as kind {}", ev.kind),
+                "submit the anchor as a ledger.anchor event so the copy is on the record",
+            ));
+        }
+        let parent = dest.parent().filter(|p| !p.as_os_str().is_empty());
+        let parent_abs = match parent {
+            Some(p) => p.canonicalize().map_err(|e| {
+                Fault::new(
+                    format!("no directory for the anchor at {}: {e}", p.display()),
+                    "create the destination directory first, on storage the process writing this ledger cannot rewrite",
+                )
+            })?,
+            None => Path::new(".").canonicalize().map_err(io_fault(&self.dir))?,
+        };
+        let dir_abs = self
+            .dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.dir.to_path_buf());
+        if parent_abs.starts_with(&dir_abs) {
+            return Err(Fault::new(
+                format!(
+                    "the anchor destination {} is inside the ledger at {}",
+                    dest.display(),
+                    self.dir.display()
+                ),
+                "anchor outside the ledger directory; a copy that whoever rewrites the log also rewrites detects nothing",
+            ));
+        }
+        if dest.exists() {
+            return Err(Fault::new(
+                format!("an anchor already exists at {}", dest.display()),
+                "anchor to a new path; overwriting the older copy destroys the record this check compares against",
+            ));
+        }
+        let head = self.latest_head()?;
+        ev.subject = serde_json::json!({
+            "anchor_kind": "file_copy",
+            "destination": parent_abs.join(dest.file_name().unwrap_or_default()).display().to_string(),
+            "tree_size": head.size,
+            "head": head,
+            "anchored_at": ev.ts,
+            "receipt": null,
+            "proves": "a party holding this copy detects a later rewrite of any entry at or before tree_size, by checking a consistency proof from the anchored head against the log's current head",
+            "does_not_prove": "anything at all to a party who does not hold the copy, and nothing about a rewrite that also rewrites the copy. The file was written by the process that writes this ledger, so this anchor is worth exactly the independence of where it was put.",
+        });
+        let mut bytes = jcs_bytes(&head)?;
+        bytes.push(b'\n');
+        fs::write(dest, bytes).map_err(|e| {
+            Fault::new(
+                format!("could not write the anchor to {}: {e}", dest.display()),
+                "point the anchor at a writable path outside the ledger directory",
+            )
+        })?;
+        let envelope = self.append(ev)?;
+        Ok((head, envelope))
+    }
+
     pub fn consistency(&self, m: usize) -> Result<Vec<String>, Fault> {
         if m == 0 || m > self.size() {
             return Err(Fault::new(
@@ -495,6 +625,25 @@ pub fn verify_bundle(bundle: &InclusionBundle, pub_key_hex: &str) -> Result<(), 
     Ok(())
 }
 
+/// Check a consistency bundle offline: both heads must be this ledger's, and
+/// the older tree must be a prefix of the newer one. The old head's signature
+/// is checked too, because "a head this log signed" is half the claim; a root
+/// a stranger typed in proves nothing about what the log ever published.
+pub fn verify_consistency_bundle(
+    bundle: &ConsistencyBundle,
+    pub_key_hex: &str,
+) -> Result<(), Fault> {
+    let vk = parse_pub_key(pub_key_hex)?;
+    verify_head_sig(&bundle.old_head, &vk)?;
+    verify_consistency_hex(
+        bundle.old_head.size,
+        &bundle.old_head.root_hash,
+        &bundle.new_head,
+        &bundle.proof,
+        pub_key_hex,
+    )
+}
+
 pub fn verify_consistency_hex(
     m: u64,
     old_root: &str,
@@ -520,6 +669,37 @@ pub fn verify_consistency_hex(
         ));
     }
     Ok(())
+}
+
+/// Holes in `seq`, per run, in the order the runs first appear. Interior gaps
+/// only: what a run's numbering starts at is the producer's business (the
+/// gateway and the broker start at 0, a hand-written trace at 1), so a first
+/// recorded seq above zero is not read as a missing opening. A sensor that
+/// fires on everything is as broken as one that never fires.
+fn seq_gaps(envelopes: &[Option<Envelope>]) -> Vec<SeqGap> {
+    let mut runs: Vec<(String, Vec<u64>)> = Vec::new();
+    for env in envelopes.iter().flatten() {
+        match runs.iter_mut().find(|(id, _)| *id == env.run_id) {
+            Some((_, seqs)) => seqs.push(env.seq),
+            None => runs.push((env.run_id.clone(), vec![env.seq])),
+        }
+    }
+    let mut gaps = Vec::new();
+    for (run_id, mut seqs) in runs {
+        seqs.sort_unstable();
+        seqs.dedup();
+        for pair in seqs.windows(2) {
+            if pair[1] > pair[0] + 1 {
+                gaps.push(SeqGap {
+                    run_id: run_id.clone(),
+                    after: pair[0],
+                    before: pair[1],
+                    missing: pair[1] - pair[0] - 1,
+                });
+            }
+        }
+    }
+    gaps
 }
 
 fn bad_hash(s: &str) -> impl Fn() -> Fault + '_ {
@@ -664,6 +844,7 @@ pub fn verify_with_actor_keys_and_published(
         }
     }
     report.entries = leaves.len();
+    report.seq_gaps = seq_gaps(&envelopes);
 
     // Chain: prev_hash of entry i must equal the leaf hash of entry i-1.
     for i in 0..envelopes.len() {
