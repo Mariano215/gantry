@@ -15,6 +15,89 @@ cargo clippy --all-targets -- -D warnings
 echo "== offline suite (ci/offline-suite, ci/no-direct-sdk, ci/ledger-append-only via tests/invariants.rs and tests/ledger.rs) =="
 cargo test
 
+echo "== the verifier reports seq gaps, a consistency proof checks from the CLI, and an anchored head catches the rewrite verification alone misses (ci/ledger-seq-gap, ci/ledger-verify-consistency, ci/ledger-anchor) =="
+cargo build --quiet
+led_bin="$PWD/target/debug/gantry"
+led_root=$(mktemp -d)
+led="$led_root/led"
+mkdir -p "$led_root/keep"
+"$led_bin" ledger init "$led" >/dev/null
+led_append() { # seq, run id: one tool.request, appended through the binary
+  printf '{"id":"ev-%s-%s","run_id":"%s","parent_id":null,"seq":%s,"ts":"2026-08-05T09:00:0%s.000Z","kind":"tool.request","actor":{"type":"agent","id":"agent:ci","identity_source":"none","rung":null},"authority":{"profile":"laptop","policy_version":"sha256:aa","instruction_version":"sha256:bb","settings_hash":"sha256:cc","permission_mode":"default","diverged":[]},"subject":{"tool_id":"Read","n":%s},"redacted":[],"attestation":null}' \
+    "$2" "$1" "$2" "$1" "$1" "$1" | "$led_bin" ledger append "$led" >/dev/null
+}
+# run-01 writes 0,1,2, dies, comes back at 5. run-02 is contiguous, so a check
+# that fires on every run fails here rather than in production.
+for s in 0 1 2 5 6; do led_append $s run-01; done
+for s in 0 1 2; do led_append $s run-02; done
+# The status is read before the text: a gap is a finding and must not change
+# the exit code, because the chain and the heads are what say the log was
+# altered, and they verify.
+if gap_out=$("$led_bin" ledger verify "$led"); then gap_status=0; else gap_status=$?; fi
+if [ "$gap_status" != 0 ]; then
+  echo "a seq gap changed the exit status of ledger verify (exit $gap_status): $gap_out. Fix: a gap is reported and counted, never a fault; VerifyReport::ok in src/ledger.rs is a statement about the record's integrity and a never-written event did not alter anything"
+  exit 1
+fi
+case "$gap_out" in
+  *"seq gap in run run-01: last seq before the gap 2, next seq after it 5, 2 event(s) missing"*)
+    ;;
+  *)
+    echo "ledger verify did not report the gap punched in run-01: $gap_out. Fix: seq_gaps in src/ledger.rs computes the holes and src/main.rs prints them; docs/EVENT-SCHEMA.md says a gap is the signal a harness was switched off mid-run, so nothing may carry that claim except this check"
+    exit 1
+    ;;
+esac
+case "$gap_out" in
+  *run-02*)
+    echo "ledger verify reported a gap in run-02, which has none: $gap_out. Fix: a check that fires on everything is as broken as one that never fires; seq_gaps reports interior holes only"
+    exit 1
+    ;;
+esac
+"$led_bin" ledger consistency "$led" 4 > "$led_root/bundle.json"
+if ! cons_out=$("$led_bin" ledger verify-consistency "$led_root/bundle.json" "$led/keys/ledger.pub"); then
+  echo "a consistency proof the ledger produced did not check out: $cons_out. Fix: gantry ledger consistency and gantry ledger verify-consistency must agree; both go through merkle::verify_consistency"
+  exit 1
+fi
+sed 's/"proof":\["sha256:[0-9a-f]*"/"proof":["sha256:abababababababababababababababababababababababababababababababab"/' \
+  "$led_root/bundle.json" > "$led_root/bundle.tampered.json"
+if bad_out=$("$led_bin" ledger verify-consistency "$led_root/bundle.tampered.json" "$led/keys/ledger.pub"); then
+  echo "a consistency proof with a hash the log never produced was accepted: $bad_out. Fix: verify_consistency_bundle in src/ledger.rs must reject it; a checker that only ever passes proves nothing"
+  exit 1
+fi
+"$led_bin" ledger anchor "$led" "$led_root/keep/head.json" >/dev/null
+if inside_out=$("$led_bin" ledger anchor "$led" "$led/head.json" 2>&1); then
+  echo "anchoring into the ledger directory was permitted: $inside_out. Fix: Ledger::anchor refuses a destination under the ledger; a copy whoever rewrites the log also rewrites detects nothing"
+  exit 1
+fi
+for s in 7 8 9; do led_append $s run-03; done
+if ! anchor_out=$("$led_bin" ledger verify-anchor "$led" "$led_root/keep/head.json"); then
+  echo "honest appends stopped agreeing with the anchored head: $anchor_out. Fix: an anchor must accept every log the anchored head is a prefix of, or it is noise"
+  exit 1
+fi
+# The rewrite an anchor exists for: the writer drops its own tail and re-signs.
+# Verification alone cannot see it, which is why the exit status of both
+# commands is checked here and not just the second one.
+head -5 "$led/events.jsonl" > "$led/events.new" && mv "$led/events.new" "$led/events.jsonl"
+head -5 "$led/heads.jsonl" > "$led/heads.new" && mv "$led/heads.new" "$led/heads.jsonl"
+for s in 5 6 7 8; do led_append $s run-09; done
+if ! rewritten_out=$("$led_bin" ledger verify "$led"); then
+  echo "the rewritten log failed verification, so this check no longer exercises what an anchor is for: $rewritten_out. Fix: rebuild the rewrite so the log stays internally consistent, then assert the anchor catches it"
+  exit 1
+fi
+if caught=$("$led_bin" ledger verify-anchor "$led" "$led_root/keep/head.json"); then
+  echo "a rewritten history still agreed with the anchored head: $caught. Fix: verify-anchor must fold the anchored root through the consistency proof; without that the ledger.anchor event is decoration"
+  exit 1
+fi
+case "$caught" in
+  *"consistency fails"*)
+    ;;
+  *)
+    echo "verify-anchor rejected the rewrite without naming it: $caught. Fix: the message must name the rewrite and the restore, since an agent reads it"
+    exit 1
+    ;;
+esac
+rm -rf "$led_root"
+echo "a punched seq gap is reported and stays a finding, a tampered consistency proof is refused, and an anchored head catches a rewrite the log verifies clean"
+
 echo "== tracked policy parses, validates, and matches host deny entries (ci/policy-host-parity) =="
 cargo run --quiet -- policy check config/policy.json .claude/settings.json
 
