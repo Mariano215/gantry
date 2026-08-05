@@ -6,10 +6,12 @@
 //! execution is in-process.
 
 use crate::event::subject_hash;
-use crate::gateway::Pinning;
+use crate::gateway::{self, CallResult, ChatMessage, Pinning, Provider};
 use crate::ledger::{Ledger, SignedHead};
 use crate::policy::{Action, CallRequest, Policy};
 use crate::runlog::RunCore;
+use crate::sandbox::Sandbox;
+use crate::secrets::{CredentialBroker, Substitution};
 use crate::Fault;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -96,6 +98,9 @@ pub struct BrokerRun {
     registered: BTreeMap<String, String>,
     identity: Value,
     outstanding_reviews: u64,
+    sandbox: Sandbox,
+    credentials: CredentialBroker,
+    cost_total_usd: f64,
 }
 
 impl BrokerRun {
@@ -122,12 +127,42 @@ impl BrokerRun {
         let instruction_pack = authority["instruction_version"].clone();
         let settings_hash = authority["settings_hash"].clone();
         let profile = policy.profile.clone();
+        let egress_allow: Vec<String> = policy.profile_requirements["egress"]["allow"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let core = RunCore::open(ledger, actor, authority);
+        let sandbox = Sandbox::per_run(
+            &std::env::temp_dir().join(format!("gantry-run-{}", core.run_id())),
+            &egress_allow,
+        )?;
+        // Only handles some capability declares can hold a value at all.
+        let declared_handles: Vec<String> = policy
+            .capabilities
+            .iter()
+            .flat_map(|c| c.credentials.clone())
+            .collect();
+        let credentials = CredentialBroker::from_env(&declared_handles);
+        // profile_requirements.isolation.declared is a claim; the backend the
+        // run actually got is observed here and recorded, so a divergence
+        // between the two is visible in the record rather than in a promise.
+        let declared_isolation = policy.profile_requirements["isolation"]["declared"]
+            .as_str()
+            .unwrap_or("none")
+            .to_string();
         let mut run = BrokerRun {
-            core: RunCore::open(ledger, actor, authority),
+            core,
             policy,
             registered: BTreeMap::new(),
             identity,
             outstanding_reviews: 0,
+            sandbox,
+            credentials,
+            cost_total_usd: 0.0,
         };
         run.core.append(
             "run.open",
@@ -137,9 +172,42 @@ impl BrokerRun {
                 "instruction_pack": instruction_pack,
                 "settings_hash": settings_hash,
                 "restored_checkpoint": null,
+                "isolation": {
+                    "declared": declared_isolation,
+                    "active_backend": run.sandbox.kind(),
+                    "workdir": run.sandbox.workdir().display().to_string(),
+                    "egress_allow": egress_allow,
+                },
             }),
         )?;
         Ok(run)
+    }
+
+    pub fn sandbox(&self) -> &Sandbox {
+        &self.sandbox
+    }
+
+    /// A model call inside a broker run, through the same gateway
+    /// chokepoint, so an agent loop that reads a document and then acts on
+    /// it leaves both halves on one ledger under one run id. `tainted`
+    /// names the tool results that fed this prompt, which is what lets a
+    /// reader see that untrusted content reached the model.
+    pub fn model_call(
+        &mut self,
+        provider: &Provider,
+        messages: &[ChatMessage],
+        tainted_inputs: &[String],
+    ) -> Result<CallResult, Fault> {
+        if !tainted_inputs.is_empty() {
+            self.core.append(
+                "taint.note",
+                json!({
+                    "reason": "untrusted tool output is entering a model prompt",
+                    "request_ids": tainted_inputs,
+                }),
+            )?;
+        }
+        gateway::call_on(&mut self.core, &mut self.cost_total_usd, provider, messages)
     }
 
     pub fn run_id(&self) -> &str {
@@ -214,6 +282,11 @@ impl BrokerRun {
         let request_id = format!("{}-req-{}", self.core.run_id(), self.core.event_count());
         let egress_allow = self.policy.profile_requirements["egress"]["allow"].clone();
         let egress_hash = subject_hash(&egress_allow)?;
+        // Handle names, never values. The args recorded here are the
+        // caller's, so an unsubstituted `{{handle:NAME}}` is what lands on
+        // the ledger; substitution happens after the allow, inside the
+        // sandbox's environment.
+        let credential_handles = CredentialBroker::handles_in(target);
         self.core.append(
             "tool.request",
             json!({
@@ -221,9 +294,9 @@ impl BrokerRun {
                 "tool": tool,
                 "schema_version": schema_version,
                 "args": args,
-                "sandbox": "none",
+                "sandbox": self.sandbox.kind(),
                 "egress_allowlist_hash": egress_hash,
-                "credential_handles": [],
+                "credential_handles": credential_handles,
             }),
         )?;
         let decision = self.policy.decide(&call, &self.identity)?;
@@ -263,8 +336,37 @@ impl BrokerRun {
                 if obligation.as_deref() == Some("review") {
                     self.outstanding_reviews += 1;
                 }
+                // Credential substitution happens here and nowhere earlier:
+                // after the policy allowed the call, at the tool boundary,
+                // scoped to the capability's declared handles.
+                let granted = decision
+                    .capability
+                    .as_deref()
+                    .and_then(|id| self.policy.capabilities.iter().find(|c| c.id == id))
+                    .map(|c| c.credentials.clone())
+                    .unwrap_or_default();
+                let substitution = match self.credentials.substitute(target, &granted) {
+                    Ok(s) => s,
+                    Err(fault) => {
+                        self.emit_result(
+                            &request_id,
+                            "denied",
+                            None,
+                            false,
+                            0,
+                            Some(&fault.to_string()),
+                        )?;
+                        return Err(Fault::new(
+                            format!(
+                                "credential broker refused {tool} and the refusal is on the ledger: {}",
+                                fault.cause
+                            ),
+                            fault.fix,
+                        ));
+                    }
+                };
                 let started = std::time::Instant::now();
-                let outcome = execute_builtin(tool, target);
+                let outcome = self.execute(tool, target, &substitution);
                 let duration_ms = started.elapsed().as_millis() as u64;
                 match outcome {
                     Ok(result) => {
@@ -328,13 +430,16 @@ impl BrokerRun {
     /// checkable, not asserted.
     pub fn seal(self, outcome: &str) -> Result<SignedHead, Fault> {
         let outstanding = self.outstanding_reviews;
+        let cost = self.cost_total_usd;
         let outcome = if outstanding > 0 && outcome == "complete" {
             "complete-with-outstanding-review".to_string()
         } else {
             outcome.to_string()
         };
-        self.core
-            .seal(json!({ "outstanding_reviews": outstanding }), &outcome)
+        self.core.seal(
+            json!({ "outstanding_reviews": outstanding, "cost_total_usd": cost }),
+            &outcome,
+        )
     }
 }
 
@@ -379,42 +484,53 @@ fn builtin_args(tool: &str, target: &str) -> Value {
     }
 }
 
-fn execute_builtin(tool: &str, target: &str) -> Result<ExecResult, Fault> {
-    match tool {
-        "Read" => {
-            let content = std::fs::read_to_string(target).map_err(|e| {
-                Fault::new(
-                    format!("cannot read {target}: {e}"),
-                    "check the path exists and is a readable text file",
-                )
-            })?;
-            Ok(ExecResult {
-                payload: json!({"content": content}),
-                content,
-            })
-        }
-        "Bash" => {
-            let out = std::process::Command::new("sh")
-                .arg("-c")
-                .arg(target)
-                .output()
-                .map_err(|e| {
+impl BrokerRun {
+    /// Runs the allowed call. `Read` stays in-process (it cannot write or
+    /// reach the network, and the policy already matched the path);
+    /// everything that executes code goes through the sandbox with a cleaned
+    /// environment and only the granted handles injected.
+    fn execute(
+        &self,
+        tool: &str,
+        target: &str,
+        substitution: &Substitution,
+    ) -> Result<ExecResult, Fault> {
+        match tool {
+            "Read" => {
+                let content = std::fs::read_to_string(target).map_err(|e| {
                     Fault::new(
-                        format!("cannot spawn sh -c for {target}: {e}"),
-                        "check sh is on PATH; the broker executes through the system shell",
+                        format!("cannot read {target}: {e}"),
+                        "check the path exists and is a readable text file",
                     )
                 })?;
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            let exit = out.status.code().unwrap_or(-1);
-            Ok(ExecResult {
-                payload: json!({"stdout": stdout, "stderr": stderr, "exit_code": exit}),
-                content: stdout,
-            })
+                Ok(ExecResult {
+                    payload: json!({"content": content}),
+                    content,
+                })
+            }
+            "Bash" => {
+                let out = self
+                    .sandbox
+                    .command(&substitution.command, &substitution.env)
+                    .output()
+                    .map_err(|e| {
+                        Fault::new(
+                            format!("cannot spawn the sandboxed shell: {e}"),
+                            "check /usr/bin/sandbox-exec and sh exist; the broker never runs a command outside the sandbox",
+                        )
+                    })?;
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                let exit = out.status.code().unwrap_or(-1);
+                Ok(ExecResult {
+                    payload: json!({"stdout": stdout, "stderr": stderr, "exit_code": exit}),
+                    content: stdout,
+                })
+            }
+            other => Err(Fault::new(
+                format!("tool {other} has no in-process executor yet"),
+                "use Read or Bash, or wait for the MCP transport in a later slice",
+            )),
         }
-        other => Err(Fault::new(
-            format!("tool {other} has no in-process executor in slice 03"),
-            "use Read or Bash, or wait for the MCP transport in a later slice",
-        )),
     }
 }

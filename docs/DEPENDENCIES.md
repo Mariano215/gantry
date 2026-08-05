@@ -22,8 +22,17 @@ host; the suite talks to loopback stubs only.
 
 ## std::process (not a crate, noted anyway)
 
-Since slice 03 the broker executes shell commands through `sh -c`
-(`src/broker.rs`), strictly after an allow verdict from the policy. This is
-the crate's only process capability, and it sits behind the same chokepoint
-that records the call. Unsandboxed until slice 04, and the policy file says
-so: `profile_requirements.isolation.declared` is `none`.
+Since slice 03 the broker executes shell commands strictly after an allow
+verdict from the policy. Since slice 04 it does so through
+`/usr/bin/sandbox-exec` (seatbelt), a platform binary, not a crate: a
+per-run profile denies all non-allowlisted network and every write outside
+the run's own workdir, and the child's environment is cleared to PATH, HOME,
+TMPDIR plus the credential handles the policy granted. This is the crate's
+only process capability, and it sits behind the same chokepoint that records
+the call. The backend actually in force is recorded on every `tool.request`
+(`sandbox`) and on `run.open` (`isolation.active_backend`), so a missing
+backend degrades to `none` visibly rather than silently.
+
+`sandbox-exec` is macOS-specific. On a host without it the backend records
+`none` and the isolation claim is honestly unmet; a Linux backend
+(namespaces or a microvm) is a later slice.

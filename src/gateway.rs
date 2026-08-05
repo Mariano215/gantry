@@ -162,10 +162,6 @@ impl GatewayRun {
         self.core.seal(json!({ "cost_total_usd": cost }), outcome)
     }
 
-    fn append_event(&mut self, kind: &str, subject: Value) -> Result<(), Fault> {
-        self.core.append(kind, subject)
-    }
-
     /// The chokepoint. Issues one chat completion and appends the call to the
     /// ledger whether it succeeded or not. The key never leaves this frame.
     pub fn call(
@@ -173,6 +169,20 @@ impl GatewayRun {
         provider: &Provider,
         messages: &[ChatMessage],
     ) -> Result<CallResult, Fault> {
+        call_on(&mut self.core, &mut self.cost_total_usd, provider, messages)
+    }
+}
+
+/// The gateway chokepoint over any open run, so a broker run can make a
+/// model call without a second route to a provider existing. `GatewayRun`
+/// is the thin wrapper; this is the mechanism.
+pub fn call_on(
+    core: &mut RunCore,
+    cost_total_usd: &mut f64,
+    provider: &Provider,
+    messages: &[ChatMessage],
+) -> Result<CallResult, Fault> {
+    {
         let key = match &provider.key_env {
             Some(var) => match std::env::var(var) {
                 Ok(v) if !v.is_empty() => Some(v),
@@ -224,9 +234,9 @@ impl GatewayRun {
                         cost
                     });
                 if let Some(cost) = cost_usd {
-                    self.cost_total_usd += cost;
+                    *cost_total_usd += cost;
                 }
-                self.append_event(
+                core.append(
                     "model.call",
                     json!({
                         "provider": provider.name,
@@ -251,7 +261,7 @@ impl GatewayRun {
                 })
             }
             Err(err) => {
-                self.append_event(
+                core.append(
                     "model.call",
                     json!({
                         "provider": provider.name,

@@ -28,10 +28,19 @@ work item, and `gantry scan` on this repo is expected to report it.
   Retention is expiry of the payload under a retained hash, never a rewrite.
   — enforced by `ci/ledger-append-only`
 - **Secrets never enter a prompt or a tool argument.** Agents hold handles.
-  The broker substitutes at the boundary. — enforced by `ci/secret-in-prompt`
+  The broker substitutes at the boundary. — enforced since slice 04 by
+  `src/secrets.rs`: a value reaches only the sandboxed child's environment,
+  never the command string, an event or a Fault; a handle a capability does
+  not declare is refused. Exercised by `tests/secrets.rs` and
+  `tests/sandbox.rs`. The remaining gap is a scanner that greps every
+  subject for a known secret value; `ci/secret-in-prompt` names it
 - **No network in tests.** The full suite runs with an empty network
   namespace. This is what keeps the air-gap claim true. — enforced by
-  `ci/offline-suite`
+  `ci/offline-suite`. Partially mechanised since slice 04: the broker runs
+  every command inside a seatbelt profile that denies all non-allowlisted
+  network, and `tests/sandbox.rs` asserts a sandboxed connection to loopback
+  fails; the suite itself binds loopback listeners only as unreachable
+  targets, never as a real route out.
 - **Profiles never lie.** Scores derive from what is running, never from the
   profile name. A scorer that reads configuration instead of telemetry is
   wrong. — `[UNENFORCED]` until slice 08

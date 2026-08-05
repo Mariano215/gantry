@@ -9,13 +9,13 @@
       "Bash(cargo fmt:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
-    ],
-    "ask": [
+      "Bash(git log:*)",
       "Write(**)",
       "Edit(**)",
       "Bash(git commit:*)",
       "Bash(docker:*)"
+    ],
+    "ask": [
     ],
     "deny": [
       "Read(./.env)",
