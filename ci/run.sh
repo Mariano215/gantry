@@ -55,7 +55,7 @@ case "$init_verify" in
 esac
 echo "the generated harness signs under a key only it holds: ${init_verify//$'\n'/; }"
 
-echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects its negative control =="
+echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects every negative control it declares and accepts every positive one =="
 cargo run --quiet -- sensor live templates/laptop/config/sensors/*.json docs/proof/fixtures/no-private-key.json
 
 echo "== permission-mode hook injects the observed mode into gantry commands, leaves everything else alone (ci/permission-mode-hook) =="

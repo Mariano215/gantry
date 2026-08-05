@@ -764,17 +764,21 @@ fn sensor_live(sensor_paths: &[&str]) -> Result<i32, Fault> {
     let mut broken = 0u32;
     for path in sensor_paths {
         let sensor = Sensor::load(Path::new(path))?;
-        if sensor.is_live(&sandbox)? {
-            println!(
-                "sensor {} is live: it rejects its negative control",
-                sensor.id
-            );
-        } else {
-            broken += 1;
-            eprintln!(
-                "sensor {} is BROKEN: it passed its own negative control, so it cannot fail and its verdicts are worthless. Fix the check so the negative control fails, then re-register.",
-                sensor.id
-            );
+        // The reason comes from the sensor rather than from a fixed string
+        // here, because a sensor breaks in two directions now: it can pass a
+        // negative control, or reject a positive one. A summary that names
+        // only the first would report the wrong defect on half the failures.
+        match sensor.liveness_failure(&sandbox)? {
+            None => println!(
+                "sensor {} is live: it rejects every negative control it declares ({}) and accepts every positive one ({})",
+                sensor.id,
+                sensor.negative_control.all().len(),
+                sensor.positive_control.all().len(),
+            ),
+            Some(why) => {
+                broken += 1;
+                eprintln!("sensor {} is BROKEN: {why}", sensor.id);
+            }
         }
     }
     Ok(if broken == 0 { 0 } else { 1 })

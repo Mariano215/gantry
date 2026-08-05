@@ -3,7 +3,18 @@
   "kind": "computational",
   "placement": "pre_integration",
   "blocking": true,
-  "check": "! grep -q 'BEGIN PRIVATE KEY' {target}",
-  "fix": "Remove the embedded private key block from the document. Keep the finding text, but replace the key material with the words: [redacted, referenced by broker handle].",
-  "negative_control": "-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n"
+  "check": "! grep -Eq '(-----BEGIN [A-Z0-9 ]*PRIVATE KEY|^[[:space:]]*[0-9a-f]{64,}[[:space:]]*$)' {target} && ! grep -Eqi '(seed|secret|private)[^0-9a-f]{0,24}[0-9a-f]{64}' {target}",
+  "fix": "Remove the key material from the document. Keep the finding text and put the words [redacted, referenced by broker handle] where the key was. This check catches a PEM or OpenSSH private key header of any type, a line that holds nothing but 64 or more hex characters (the shape of a raw ed25519 seed), and 64 hex characters on a line that also carries the word seed, secret or private. It deliberately ignores a hash written with other text on its line, which is how this system prints every sha256, so a bare seed pasted mid-sentence with no label reads as a hash and gets past it; do not treat a pass as proof that a document carrying inline hex is clean.",
+  "negative_control": [
+    "-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n",
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----\n",
+    "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\n",
+    "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIA\n-----END EC PRIVATE KEY-----\n",
+    "4b1d9f0c7a3e56812d40fbca97e3d215608b7fa1c3d4e0b95f2a6c8d1e7b304a\n",
+    "{\"actor_seed\": \"b7c2e9014fa35d68e0c41b7d59a2f3068cd41e7b25a9f0c3d68b41e7a25c9f03\"}\n"
+  ],
+  "positive_control": [
+    "# Audit findings\n\nRun under policy_version sha256:96e0aa56fb0cd42c4635032ff28178e77f7efdef4e82183c2b3ea58a28eacc3c against the pack declared in config/policy.json as sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34.\nEvidence: payloads/298c260ab0a9b613721ef5d173a43f57b2fbb03c96987d4f7aaccb95cac29d66.json\n{\"pack_hash\":\"e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34\",\"reviewer\":\"mariano215@gmail.com\",\"date\":\"2026-08-05\",\"note\":\"baseline review, matches profile_requirements.instruction_pack.declared in config/policy.json\"}\n",
+    "{\"actor\":{\"id\":\"system:sensor-bus\",\"identity_source\":\"local\",\"rung\":null,\"type\":\"system\"},\"attestation\":null,\"authority\":{\"diverged\":[\"host_permissions.permission_mode\"],\"instruction_version\":\"sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34\",\"permission_mode\":\"bypassPermissions\",\"policy_version\":\"sha256:96e0aa56fb0cd42c4635032ff28178e77f7efdef4e82183c2b3ea58a28eacc3c\",\"profile\":\"laptop\",\"settings_hash\":\"sha256:5a22b9dde36481e31c8adb73457aeda17f2b09c4dc7d095f59be9e6373686fa5\"},\"id\":\"run-1785929807393-0\",\"kind\":\"run.open\",\"parent_id\":null,\"prev_hash\":null,\"redacted\":[],\"run_id\":\"run-1785929807393\",\"seq\":0,\"subject_hash\":\"sha256:d25ef598900395241313e85fe72e825b904b1a9ec3ebd34f1ac0447f41b836c3\",\"ts\":\"2026-08-05T11:36:47.394Z\",\"v\":2}\n"
+  ]
 }

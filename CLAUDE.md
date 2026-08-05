@@ -117,17 +117,30 @@ work item, and `gantry scan` on this repo is expected to report it.
   would become post without a declared rollback degrades to pre instead. —
   enforced by `tests/broker.rs`
   (`broker_gates_on_the_earned_rung_not_the_declared_one`)
-- **A sensor that cannot fail is broken, not clean.** Every sensor declares a
-  negative control it must reject; a sensor that passes its own negative
-  control is reported as `broken`, never as a clean pass, so a green board of
-  dead sensors is impossible. — enforced since slice 05 by `src/sensor.rs`
-  (`Sensor::is_live` runs before any trusted verdict); exercised by
-  `tests/sensor.rs` and `docs/proof/05.md`. Liveness is also swept on a
-  schedule since the post-nine gap work: `gantry sensor live` runs every
-  tracked sensor's negative control standalone, `ci/run.sh` runs the sweep
-  on every push, and the workflow adds a weekly cron so a sensor that rots
-  between pushes is caught by the schedule, not by the next unlucky
-  verdict. — enforced by `ci/run.sh` and `.github/workflows/ci.yml`
+- **A sensor that cannot fail is broken, not clean, and neither is one that
+  fires on everything.** Every sensor declares a negative control per branch
+  of its check, content it must reject, and may declare positive controls,
+  content it must accept; a sensor that passes any negative control or
+  rejects any positive one is reported as `broken`, never as a clean pass, so
+  a green board of dead sensors is impossible. One control for a check that
+  catches four kinds of thing leaves three branches dead while the sensor
+  still reports live, which is why `negative_control` takes a list (the
+  single-string form still loads). Enforced since slice 05 by `src/sensor.rs`
+  (`Sensor::liveness_failure` runs every control before any trusted verdict,
+  and `Sensor::validate` refuses a sensor with no negative control);
+  exercised by `tests/sensor.rs` and `docs/proof/05.md`. The summary
+  `gantry sensor live` prints comes from that same function rather than from
+  a fixed string, so a sensor broken by a positive control is not reported as
+  having passed a negative one. Liveness is also swept on a schedule since
+  the post-nine gap work: `gantry sensor live` runs every tracked sensor's
+  controls standalone, `ci/run.sh` runs the sweep on every push, and the
+  workflow adds a weekly cron so a sensor that rots between pushes is caught
+  by the schedule, not by the next unlucky verdict. The positive controls are
+  what keep a widened check honest in the other direction: the
+  `no-private-key` sensor's are a real ledger envelope and the tracked policy
+  and review records, so a check that fires on this system's own sha256
+  output is reported broken rather than shipped and switched off. Enforced by
+  `ci/run.sh` and `.github/workflows/ci.yml`
 - **An attestation is verified or declared unverified, never assumed.** The
   ledger verifier checks actor attestations against registered keys: an
   attestation under a registered key id is verified (a failure is a fault,
