@@ -128,6 +128,7 @@ Defined here because a stranger cannot verify what is not written down
 | `ledger.anchor` | 11 | Where the head was anchored (WORM path, RFC 3161 TSA, notary), the head anchored, and the receipt hash (finding 5). |
 | `retention.expire` | 11 · 12 | The `subject_hash` expired, the retention rule that authorised it, and the actor. An expiry is an act under someone's authority and must be an event (finding 5). |
 | `tool.register` | 04 | Tool id, schema version, schema hash, registry verdict. A rejected registration is recorded with the reason (finding 5). |
+| `skill.resolve` | 09 | Skill id, version, verdict (`resolved`, `rejected`), signature state (`verified:<key>`, `unsigned`), resolved steps and scope. Added in slice 09: a rejected resolution carries the reason, so a broken skill's refusal is on the record, not just its absence. |
 
 ## Concurrency
 

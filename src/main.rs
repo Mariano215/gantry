@@ -11,6 +11,7 @@ use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::policy::Policy;
 use gantry::scorer::Scoring;
 use gantry::sensor::{Sensor, SensorRun, Verdict};
+use gantry::skills::SkillManifest;
 use gantry::trust::Orchestrator;
 use gantry::Fault;
 use serde_json::json;
@@ -43,7 +44,10 @@ const USAGE: &str = "usage:
   gantry durable show <ledger-dir> <task-id>
   gantry graph build <graph.json> <file>...
   gantry graph compare <graph.json> <symbol> <file>...
-  gantry score <ledger-dir> [scoring.json] [console.html]";
+  gantry score <ledger-dir> [scoring.json] [console.html]
+  gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
+  gantry skill delegate <parent-caps-csv> <package-dir>
+  gantry skill sign <package-dir> <seed-hex>";
 
 fn main() {
     match run() {
@@ -263,6 +267,14 @@ fn run() -> Result<i32, Fault> {
         ["score", ledger_dir] => score(ledger_dir, "config/scoring.json", None),
         ["score", ledger_dir, rules] => score(ledger_dir, rules, None),
         ["score", ledger_dir, rules, console] => score(ledger_dir, rules, Some(console)),
+        ["skill", "resolve", ledger_dir, package_dir] => {
+            skill_resolve(ledger_dir, package_dir, &[])
+        }
+        ["skill", "resolve", ledger_dir, package_dir, key] => {
+            skill_resolve(ledger_dir, package_dir, &[key.to_string()])
+        }
+        ["skill", "delegate", parent_caps, package_dir] => skill_delegate(parent_caps, package_dir),
+        ["skill", "sign", package_dir, seed_hex] => skill_sign(package_dir, seed_hex),
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -564,6 +576,138 @@ tr.good{{background:#e6f4ea}}tr.ok{{background:#fff8e1}}tr.low{{background:#fdec
 <p>Rules {}, {} events scored. Overall is the minimum by rule: one weak layer caps the whole.</p>",
         snapshot.rules_version, snapshot.events_scored
     )
+}
+
+/// Resolve a skill package and record the verdict on the ledger. A broken
+/// manifest, a missing step, or an unverifiable signature is refused here, at
+/// resolve time, before any run consumes the skill. The refusal is on the
+/// record too.
+fn skill_resolve(ledger_dir: &str, package_dir: &str, registry: &[String]) -> Result<i32, Fault> {
+    let pkg = Path::new(package_dir);
+    let manifest = SkillManifest::load(&pkg.join("skill.json"))?;
+    let dir = Path::new(ledger_dir);
+    let mut ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let outcome = manifest.resolve(pkg, registry);
+    let (verdict, reason, subject) = match &outcome {
+        Ok(resolved) => ("resolved", None, resolved.subject()),
+        Err(fault) => (
+            "rejected",
+            Some(fault.to_string()),
+            json!({
+                "id": manifest.id,
+                "version": manifest.version,
+                "verdict": "rejected",
+                "reason": fault.to_string(),
+            }),
+        ),
+    };
+    append_system_event(&mut ledger, "skill.resolve", subject)?;
+    match outcome {
+        Ok(resolved) => {
+            println!(
+                "skill {} v{} resolved: {} step(s), signature {}, scope {:?}",
+                resolved.id,
+                resolved.version,
+                resolved.steps.len(),
+                resolved.signature_state,
+                resolved.scope
+            );
+            let _ = (verdict, reason);
+            Ok(0)
+        }
+        Err(fault) => {
+            eprintln!("{fault}");
+            println!("rejection recorded on the ledger");
+            Ok(1)
+        }
+    }
+}
+
+/// Sign a package's skill.json in place with the given ed25519 seed and print
+/// the public key to register. A build helper for fixtures and publishing.
+fn skill_sign(package_dir: &str, seed_hex: &str) -> Result<i32, Fault> {
+    let manifest_path = Path::new(package_dir).join("skill.json");
+    let manifest = SkillManifest::load(&manifest_path)?;
+    let signed = manifest.signed_with(seed_hex)?;
+    let json = serde_json::to_string_pretty(&signed).map_err(|e| {
+        Fault::new(
+            format!("signed manifest does not serialise: {e}"),
+            "report this as a bug",
+        )
+    })?;
+    fs::write(&manifest_path, json + "\n").map_err(|e| {
+        Fault::new(
+            format!("cannot write {}: {e}", manifest_path.display()),
+            "check the package directory is writable",
+        )
+    })?;
+    let seed: [u8; 32] = hex::decode(seed_hex)
+        .ok()
+        .and_then(|b| b.try_into().ok())
+        .ok_or_else(|| usage_fault("seed is not 32 hex-encoded bytes"))?;
+    let sk = ed25519_dalek::SigningKey::from_bytes(&seed);
+    let pub_hex = hex::encode(sk.verifying_key().as_bytes());
+    println!(
+        "signed {}; register this public key: {pub_hex}",
+        manifest_path.display()
+    );
+    Ok(0)
+}
+
+/// Show delegation narrowing a parent's grant by a skill's scope, refusing to
+/// widen. Read-only; prints the granted set or the refusal.
+fn skill_delegate(parent_caps: &str, package_dir: &str) -> Result<i32, Fault> {
+    let manifest = SkillManifest::load(&Path::new(package_dir).join("skill.json"))?;
+    let parent: Vec<String> = parent_caps
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    match gantry::skills::delegate(&parent, &manifest.scope.capabilities) {
+        Ok(granted) => {
+            println!(
+                "delegation to skill {}: parent holds {:?}, skill scope {:?}, granted {:?}",
+                manifest.id, parent, manifest.scope.capabilities, granted
+            );
+            Ok(0)
+        }
+        Err(fault) => {
+            eprintln!("{fault}");
+            Ok(1)
+        }
+    }
+}
+
+/// Append a system-actor event to a ledger with authority pinned the tracked
+/// way, for the small out-of-run records (skill resolutions, scores).
+fn append_system_event(
+    ledger: &mut Ledger,
+    kind: &str,
+    subject: serde_json::Value,
+) -> Result<(), Fault> {
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let policy_version = policy.policy_version.clone().unwrap_or_default();
+    let pin = durable_pin();
+    let authority = pin.authority(&policy.profile, &policy_version)?;
+    ledger.append(NewEvent {
+        id: format!("{kind}-{}", ledger.size()),
+        run_id: format!("run-{kind}"),
+        parent_id: None,
+        seq: 0,
+        ts: gantry::gateway::rfc3339_now(),
+        kind: kind.to_string(),
+        actor: json!({"type": "system", "id": "system:resolver", "identity_source": "local", "rung": null}),
+        authority,
+        subject,
+        redacted: vec![],
+        attestation: None,
+    })?;
+    Ok(())
 }
 
 fn graph_build(graph_path: &str, files: &[&str]) -> Result<i32, Fault> {

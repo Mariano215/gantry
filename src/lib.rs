@@ -11,6 +11,7 @@ pub mod sandbox;
 pub mod scorer;
 pub mod secrets;
 pub mod sensor;
+pub mod skills;
 pub mod trust;
 
 use std::fmt;

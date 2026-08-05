@@ -32,6 +32,9 @@ Every slice ends in an adversarial proof under `docs/proof/`.
   retrieval that reads a fraction of a flat scan, and reports when it loses.
 - **Conformance scorer** (`src/scorer.rs`): the rubric as a running service,
   scoring the platform from telemetry.
+- **Skills and delegation** (`src/skills.rs`): signed skill packages, a
+  resolver that refuses a broken one rather than publishing it on its title,
+  and delegation that can only narrow scope.
 
 ## Gantry scored by Gantry
 
@@ -51,8 +54,8 @@ would hide.
 | 05 | Execution environment | 4 | Commands run inside a seatbelt sandbox, recorded per request. |
 | 06 | Durable state | 3 | A run resumed from a checkpoint: the seam is on the record. |
 | 07 | Orchestration | 3 | A rung earned promotion under a named approver. |
-| 08 | Sub-agents | N/A | Not yet built (slice 09). N/A, not zero. |
-| 09 | Skills | N/A | Not yet built (slice 09). N/A, not zero. |
+| 08 | Sub-agents | 3 | Delegation narrows scope and refuses to widen; no per-sub-agent run telemetry yet. |
+| 09 | Skills | 3 | Signed skill packages resolved or refused, never titled; key registry still per-call. |
 | 10 | Verification | 4 | A sensor that could not fail was reported broken, not clean. |
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
 | 12 | Governance | 3 | Authority-as-code produced a named denial; permission-mode drift still unobserved, capping at 3. |
