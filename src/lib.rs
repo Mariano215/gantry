@@ -8,6 +8,7 @@ pub mod merkle;
 pub mod policy;
 pub mod runlog;
 pub mod sandbox;
+pub mod scorer;
 pub mod secrets;
 pub mod sensor;
 pub mod trust;

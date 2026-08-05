@@ -9,6 +9,7 @@ use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::graph::Graph;
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::policy::Policy;
+use gantry::scorer::Scoring;
 use gantry::sensor::{Sensor, SensorRun, Verdict};
 use gantry::trust::Orchestrator;
 use gantry::Fault;
@@ -41,7 +42,8 @@ const USAGE: &str = "usage:
   gantry durable resume <ledger-dir> <task-id> <file>...
   gantry durable show <ledger-dir> <task-id>
   gantry graph build <graph.json> <file>...
-  gantry graph compare <graph.json> <symbol> <file>...";
+  gantry graph compare <graph.json> <symbol> <file>...
+  gantry score <ledger-dir> [scoring.json] [console.html]";
 
 fn main() {
     match run() {
@@ -258,6 +260,9 @@ fn run() -> Result<i32, Fault> {
         ["graph", "compare", graph_path, symbol, files @ ..] if !files.is_empty() => {
             graph_compare(graph_path, symbol, files)
         }
+        ["score", ledger_dir] => score(ledger_dir, "config/scoring.json", None),
+        ["score", ledger_dir, rules] => score(ledger_dir, rules, None),
+        ["score", ledger_dir, rules, console] => score(ledger_dir, rules, Some(console)),
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -482,6 +487,83 @@ fn durable_pin() -> Pinning {
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
     }
+}
+
+/// Score a ledger against the rules, print the scorecard, emit a
+/// score.snapshot onto that ledger, and optionally render an HTML console.
+/// The scorer reads telemetry only, so the number derives from what ran.
+fn score(ledger_dir: &str, rules_path: &str, console: Option<&str>) -> Result<i32, Fault> {
+    let scoring = Scoring::load(Path::new(rules_path))?;
+    let mut ledger = Ledger::open(Path::new(ledger_dir))?;
+    let events = ledger.events_with_subjects()?;
+    let snapshot = scoring.score(&events);
+    print!("{}", snapshot.markdown());
+
+    // Record the score on the ledger it scored: the platform observing
+    // itself is itself an event.
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let policy_version = policy.policy_version.clone().unwrap_or_default();
+    let pin = durable_pin();
+    let authority = pin.authority(&policy.profile, &policy_version)?;
+    ledger.append(gantry::event::NewEvent {
+        id: format!("score-{}", snapshot.events_scored),
+        run_id: "run-scorer".to_string(),
+        parent_id: None,
+        seq: 0,
+        ts: gantry::gateway::rfc3339_now(),
+        kind: "score.snapshot".to_string(),
+        actor: json!({"type": "system", "id": "system:scorer", "identity_source": "local", "rung": null}),
+        authority,
+        subject: snapshot.subject(),
+        redacted: vec![],
+        attestation: None,
+    })?;
+
+    if let Some(path) = console {
+        fs::write(path, console_html(&snapshot)).map_err(|e| {
+            Fault::new(
+                format!("cannot write console {path}: {e}"),
+                "check the directory is writable",
+            )
+        })?;
+        println!("\nconsole written to {path}");
+    }
+    Ok(0)
+}
+
+/// A self-contained static console. The plan's UI is static assets the binary
+/// serves; this is that asset, generated from the snapshot. Serving it is a
+/// thin future add.
+fn console_html(snapshot: &gantry::scorer::ScoreSnapshot) -> String {
+    let overall = snapshot
+        .overall
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "N/A".into());
+    let mut rows = String::new();
+    for p in &snapshot.scores {
+        let (score, cls) = match p.score {
+            Some(n) if n >= 4 => (n.to_string(), "good"),
+            Some(n) if n >= 3 => (n.to_string(), "ok"),
+            Some(n) => (n.to_string(), "low"),
+            None => ("N/A".to_string(), "na"),
+        };
+        rows.push_str(&format!(
+            "<tr class=\"{cls}\"><td>{:02}</td><td>{}</td><td class=\"score\">{score}</td><td>{}</td></tr>\n",
+            p.primitive, p.name, p.evidence
+        ));
+    }
+    format!(
+        "<!doctype html><meta charset=utf-8><title>Gantry conformance</title>\
+<style>body{{font:15px system-ui;margin:2rem;max-width:60rem}}table{{border-collapse:collapse;width:100%}}\
+td,th{{border:1px solid #ccc;padding:.4rem .6rem;text-align:left}}.score{{font-weight:700;text-align:center}}\
+tr.good{{background:#e6f4ea}}tr.ok{{background:#fff8e1}}tr.low{{background:#fdecea}}tr.na{{color:#888}}\
+.overall{{font-size:1.4rem;margin:1rem 0}}</style>\
+<h1>Gantry conformance, scored from its own telemetry</h1>\
+<p class=overall><b>Overall level: {overall}</b> (the minimum across scored primitives, not the average)</p>\
+<table><tr><th>#</th><th>Primitive</th><th>Score</th><th>Evidence</th></tr>\n{rows}</table>\
+<p>Rules {}, {} events scored. Overall is the minimum by rule: one weak layer caps the whole.</p>",
+        snapshot.rules_version, snapshot.events_scored
+    )
 }
 
 fn graph_build(graph_path: &str, files: &[&str]) -> Result<i32, Fault> {
