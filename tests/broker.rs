@@ -589,3 +589,148 @@ fn tracked_policy_has_host_parity() {
         "host deny entries without a policy rule: {faults:?}"
     );
 }
+
+/// `gantry template init` on the tracked template, returning the harness's
+/// declared actor key id. The bundle is validated as a harness in its own
+/// right before the key id is read, so a destination that would refuse to run
+/// fails here rather than downstream.
+fn init_harness(dest: &Path) -> String {
+    let template = repo_path("templates/laptop");
+    assert!(
+        template_cmd(&["init", template.to_str().unwrap(), dest.to_str().unwrap()])
+            .status
+            .success(),
+        "template init failed"
+    );
+    // The produced directory is the same bundle shape, so the validator the
+    // template passes is the one the harness must pass in its own right.
+    assert!(
+        template_cmd(&["validate", dest.to_str().unwrap()])
+            .status
+            .success(),
+        "the generated harness does not validate"
+    );
+    Policy::load(&dest.join("config/policy.json"))
+        .unwrap()
+        .profile_requirements["attestation"]["key_id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// `gantry template <args>`, run as the binary a user runs.
+fn template_cmd(args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_gantry"))
+        .arg("template")
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+/// The template ships no key material, so init generates the key. Two inits
+/// must produce two signing identities: a template that handed every install
+/// the same key would produce signatures that verify and attribute nothing,
+/// which is exactly what the published-seed refusal already rules out for
+/// every profile but laptop. The generated harness must also actually sign,
+/// and its attestations must not be counted under a published seed.
+#[test]
+fn template_init_generates_a_per_harness_key_and_the_harness_signs() {
+    let dir = workdir("template-init");
+    let first = dir.join("first");
+    let second = dir.join("second");
+    let first_key = init_harness(&first);
+    let second_key = init_harness(&second);
+    assert_ne!(
+        first_key, second_key,
+        "each init generates its own key; a shared one would hand every install the same signing identity"
+    );
+
+    let led = first.join("ledger");
+    let pin = Pinning {
+        policy: first.join("config/policy.json"),
+        instructions: first.join("instructions/pack.md"),
+        settings: None,
+        diverged: vec![],
+    };
+    let mut run = BrokerRun::open(
+        Ledger::init(&led).unwrap(),
+        Policy::load(&pin.policy).unwrap(),
+        "template-init",
+        &pin,
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    run.call(
+        "Read",
+        &first.join("instructions/pack.md").display().to_string(),
+    )
+    .unwrap();
+    run.seal("complete").unwrap();
+
+    let registry =
+        gantry::skills::KeyRegistry::load(&first.join("config/actor-keys.json")).unwrap();
+    let published = registry.published_seed_hexes();
+    assert!(
+        published.is_empty(),
+        "a generated key is held by this install, so the registry never marks its seed published"
+    );
+    let report =
+        ledger::verify_with_actor_keys_and_published(&led, &registry.key_hexes(), &published)
+            .unwrap();
+    assert!(report.ok(), "faults: {:?}", report.faults);
+    assert_eq!(
+        report.attestations_verified,
+        events(&led).len(),
+        "every event of the run verifies against the generated registry"
+    );
+    assert_eq!(report.attestations_unverified, 0);
+    assert_eq!(
+        report.attestations_under_published_seed, 0,
+        "the generated attestation is attribution, not the laptop fixture's provenance"
+    );
+    assert_eq!(
+        events(&led)[0]["attestation"]["key_id"],
+        json!(first_key),
+        "the key on the event is the key the generated policy declares"
+    );
+}
+
+/// Init refuses rather than overwriting, and a refused init leaves no seed.
+/// Key material for a harness nobody finished building is worse than no
+/// harness: it looks like a held key and belongs to nothing.
+#[test]
+fn a_refused_init_leaves_no_seed_and_never_clobbers_one() {
+    let dir = workdir("template-init-refused");
+    let occupied = dir.join("occupied");
+    fs::create_dir_all(occupied.join("config")).unwrap();
+    fs::write(occupied.join("config/policy.json"), "{}").unwrap();
+    let template = repo_path("templates/laptop");
+    let out = template_cmd(&[
+        "init",
+        template.to_str().unwrap(),
+        occupied.to_str().unwrap(),
+    ]);
+    assert!(!out.status.success());
+    assert!(
+        !occupied.join("config/actor-key.seed").exists(),
+        "a refused init must not leave a seed for a harness that does not exist"
+    );
+    assert_eq!(
+        fs::read_to_string(occupied.join("config/policy.json")).unwrap(),
+        "{}",
+        "init never overwrites what is already there"
+    );
+
+    // The same refusal covers key material: an init into a directory that
+    // already holds a seed must not replace it.
+    let done = dir.join("done");
+    init_harness(&done);
+    let seed = fs::read_to_string(done.join("config/actor-key.seed")).unwrap();
+    let again = template_cmd(&["init", template.to_str().unwrap(), done.to_str().unwrap()]);
+    assert!(!again.status.success());
+    assert_eq!(
+        fs::read_to_string(done.join("config/actor-key.seed")).unwrap(),
+        seed,
+        "a second init never rewrites the first harness's key"
+    );
+}
