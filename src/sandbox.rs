@@ -15,6 +15,18 @@ const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
 static SANDBOX_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// The isolation backend a run gets on this host. This is what
+/// `profile_requirements.isolation.observed_by: sandbox.active_backend`
+/// names, and it is the same expression `Sandbox::per_run` stamps on every
+/// `tool.request`, so the drift check and the event cannot disagree.
+pub fn active_backend() -> &'static str {
+    if Path::new(SANDBOX_EXEC).exists() {
+        "seatbelt"
+    } else {
+        "none"
+    }
+}
+
 /// A process-unique scratch directory under TMPDIR. Run ids are millisecond
 /// timestamps, so two runs opened in the same millisecond (parallel tests,
 /// tight loops) would otherwise share a sandbox workdir and each other's
@@ -61,11 +73,7 @@ impl Sandbox {
         // The shell itself needs the null device and its tty.
         profile
             .push_str("(allow file-write-data (literal \"/dev/null\") (literal \"/dev/tty\"))\n");
-        let kind = if Path::new(SANDBOX_EXEC).exists() {
-            "seatbelt"
-        } else {
-            "none"
-        };
+        let kind = active_backend();
         Ok(Sandbox {
             profile,
             workdir,

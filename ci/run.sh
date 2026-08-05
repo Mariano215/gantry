@@ -18,6 +18,91 @@ cargo test
 echo "== tracked policy parses, validates, and matches host deny entries (ci/policy-host-parity) =="
 cargo run --quiet -- policy check config/policy.json .claude/settings.json
 
+echo "== drift walks profile_requirements against the running system, and a source it cannot read is a gap not a match (ci/drift-honest) =="
+drift_root=$(mktemp -d)
+# The sources src/drift.rs actually reads. Anything else must report
+# unobservable, whatever the two values happen to be.
+drift_readable="sandbox.active_backend gateway.instruction_hash hook.settings_hash ledger.head gateway.identity_source event.attestation.key_id"
+if drift_out=$(cargo run --quiet -- drift "$drift_root/tracked" config/policy.json); then
+  drift_status=0
+else
+  drift_status=$?
+fi
+# Exit status first, then the text. A command that prints a report and then
+# dies would otherwise pass a check that reads only what it printed. 1 is the
+# documented status for "a field diverged"; anything above it is a failure to
+# run at all.
+if [ "$drift_status" -gt 1 ]; then
+  echo "gantry drift did not run against the tracked policy (exit $drift_status): $drift_out. Fix: run cargo run -- drift /tmp/drift-led config/policy.json by hand and work through the first failure it names"
+  exit 1
+fi
+for field in ${(f)"$(jq -r '.profile_requirements | keys[]' config/policy.json)"}; do
+  line=$(print -r -- "$drift_out" | grep "^$field: " || true)
+  if [ -z "$line" ]; then
+    echo "gantry drift reported nothing for profile_requirements.$field. Fix: every field reports every run, matches included; see walk in src/drift.rs"
+    exit 1
+  fi
+  # A bare scalar requirement (rung_default) names no source at all, which is
+  # the "none" case and must report as a gap like any other unread source.
+  source=$(jq -r --arg f "$field" '.profile_requirements[$f] | if type == "object" then (.observed_by // "none") else "none" end' config/policy.json)
+  case " $drift_readable " in
+    *" $source "*) ;;
+    *)
+      case "$line" in
+        "$field: unobservable"*) ;;
+        *)
+          echo "profile_requirements.$field names the source $source, which no code in src/drift.rs reads, and drift reported: $line. Fix: a source nothing reads reports unobservable, never a match; add a real observation to read in src/drift.rs or leave the field a declared gap"
+          exit 1
+          ;;
+      esac
+      ;;
+  esac
+done
+# Both controls run on every push, because a check never seen red is a dead
+# sensor reporting green.
+cp -R config "$drift_root/config"
+jq '.profile_requirements.isolation.observed_by = "netns.route_table"' config/policy.json > "$drift_root/config/policy.json"
+blind=$(cargo run --quiet -- drift "$drift_root/blind" "$drift_root/config/policy.json" | grep "^isolation: " || true)
+case "$blind" in
+  "isolation: unobservable"*)
+    ;;
+  *)
+    echo "isolation declared a value and named a source with no reader, and drift said: $blind. Fix: read in src/drift.rs must return Unreadable for netns.route_table; a match here means the check agrees with itself instead of observing anything"
+    exit 1
+    ;;
+esac
+jq '.profile_requirements.host_permissions.declared = "sha256:0000000000000000000000000000000000000000000000000000000000000000"' config/policy.json > "$drift_root/config/policy.json"
+if red=$(cargo run --quiet -- drift "$drift_root/red" "$drift_root/config/policy.json"); then
+  red_status=0
+else
+  red_status=$?
+fi
+if [ "$red_status" != 1 ]; then
+  echo "a policy declaring a host permission hash the running system does not have exited $red_status, not 1: $red. Fix: gantry drift exits 1 when any field diverges; see drift_scan in src/main.rs"
+  exit 1
+fi
+case "$red" in
+  *"host_permissions: divergence"*)
+    ;;
+  *)
+    echo "a real divergence went unreported: $red. Fix: read in src/drift.rs must compare the declared host permission hash against hook.settings_hash"
+    exit 1
+    ;;
+esac
+settings_hash="sha256:$(shasum -a 256 .claude/settings.json | cut -d' ' -f1)"
+jq --arg h "$settings_hash" '.profile_requirements.host_permissions.declared = $h' config/policy.json > "$drift_root/config/policy.json"
+if clean=$(cargo run --quiet -- drift "$drift_root/clean" "$drift_root/config/policy.json"); then
+  clean_status=0
+else
+  clean_status=$?
+fi
+rm -rf "$drift_root"
+if [ "$clean_status" != 0 ]; then
+  echo "a policy whose declared values match the running system still reported drift (exit $clean_status): $clean. Fix: the divergence line above names the field, both values and the change to make; config/policy.json declares something the running system no longer has"
+  exit 1
+fi
+echo "drift walked $(jq -r '.profile_requirements | keys | length' config/policy.json) field(s), reported every unreadable source as a gap, and both controls fired: ${drift_out##*$'\n'}"
+
 echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
