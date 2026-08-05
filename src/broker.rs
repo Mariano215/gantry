@@ -9,7 +9,7 @@ use crate::event::subject_hash;
 use crate::gateway::{self, CallResult, ChatMessage, Pinning, Provider};
 use crate::ledger::{Ledger, SignedHead};
 use crate::policy::{Action, CallRequest, Policy};
-use crate::runlog::RunCore;
+use crate::runlog::{ActorSigner, RunCore};
 use crate::sandbox::Sandbox;
 use crate::secrets::{CredentialBroker, Substitution};
 use crate::Fault;
@@ -138,7 +138,14 @@ impl BrokerRun {
                     .collect()
             })
             .unwrap_or_default();
-        let core = RunCore::open(ledger, actor, authority);
+        // The actor key the profile declares. Resolved before anything is
+        // appended: a declared key that will not load refuses the run here,
+        // rather than the run continuing unsigned.
+        let signer = ActorSigner::declared(
+            &policy.profile_requirements,
+            gateway::policy_dir(&pin.policy),
+        )?;
+        let core = RunCore::open(ledger, actor, authority).signed_by(signer);
         let sandbox =
             Sandbox::per_run(&crate::sandbox::unique_run_dir("gantry-run"), &egress_allow)?;
         // Only handles some capability declares can hold a value at all.
