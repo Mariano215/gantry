@@ -1,0 +1,91 @@
+{
+  "scores": [
+    {
+      "primitive": 1,
+      "name": "Instruction",
+      "score": 3,
+      "evidence": "instruction pack version-pinned on every run.open; no lifecycle telemetry, so capped at 3",
+      "sample_event": "ev-01JQ0000ZK9F3TQW00"
+    },
+    {
+      "primitive": 2,
+      "name": "Context delivery",
+      "score": 3,
+      "evidence": "model.call declares inputs and window budget on every call; no per-input arrival telemetry",
+      "sample_event": "ev-01JQ0001ZK9F3TQW01"
+    },
+    {
+      "primitive": 3,
+      "name": "Context management",
+      "score": 4,
+      "evidence": "graph.query reports bytes_read against index_bytes, so retrieval cost is measured rather than asserted",
+      "sample_event": "ev-01JQ0014ZK9F3TQW14"
+    },
+    {
+      "primitive": 4,
+      "name": "Tool interface",
+      "score": 3,
+      "evidence": "tool.request carries a schema version on every call; no tool.register events on this ledger",
+      "sample_event": "ev-01JQ0002ZK9F3TQW02"
+    },
+    {
+      "primitive": 5,
+      "name": "Execution environment",
+      "score": 4,
+      "evidence": "every tool.request names a sandbox and an egress allowlist hash",
+      "sample_event": "ev-01JQ0005ZK9F3TQW05"
+    },
+    {
+      "primitive": 6,
+      "name": "Durable state",
+      "score": null,
+      "evidence": "N/A: no telemetry for this primitive in this ledger",
+      "sample_event": null
+    },
+    {
+      "primitive": 7,
+      "name": "Orchestration",
+      "score": 3,
+      "evidence": "capability.run and approval both present; no rung earned by threshold in this window",
+      "sample_event": "ev-01JQ0013ZK9F3TQW13"
+    },
+    {
+      "primitive": 8,
+      "name": "Sub-agents",
+      "score": 4,
+      "evidence": "subagent.spawn declares the granted capability set and the broker gates on it",
+      "sample_event": "ev-01JQ0018ZK9F3TQW18"
+    },
+    {
+      "primitive": 9,
+      "name": "Skills",
+      "score": 4,
+      "evidence": "skill.resolve carries a verified signature state, never a title fallback",
+      "sample_event": "ev-01JQ0017ZK9F3TQW17"
+    },
+    {
+      "primitive": 10,
+      "name": "Verification",
+      "score": 3,
+      "evidence": "sensor.verdict carries a liveness-checked verdict; one sensor reported broken",
+      "sample_event": "ev-01JQ0022ZK9F3TQW22"
+    },
+    {
+      "primitive": 11,
+      "name": "Observability",
+      "score": 3,
+      "evidence": "signed head over every envelope; no ledger.anchor event, so the head is not anchored off-host",
+      "sample_event": "ev-01JQ0015ZK9F3TQW15"
+    },
+    {
+      "primitive": 12,
+      "name": "Governance",
+      "score": 3,
+      "evidence": "every policy.decision names a rule id; one run carries a non-empty authority.diverged",
+      "sample_event": "ev-01JQ0006ZK9F3TQW06"
+    }
+  ],
+  "overall": 3,
+  "rules_version": "scoring-2",
+  "events_scored": 24
+}

@@ -1,0 +1,930 @@
+{
+  "events": [
+    {
+      "v": 2,
+      "id": "ev-01JQ0000ZK9F3TQW00",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 0,
+      "ts": "2025-08-05T07:46:40.000Z",
+      "kind": "run.open",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0000a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": null,
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "profile": "laptop",
+        "workload": "repo-audit",
+        "instruction_pack": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "restored_checkpoint": null
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0001ZK9F3TQW01",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 1,
+      "ts": "2025-08-05T07:46:40.340Z",
+      "kind": "model.call",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0001a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90000a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "provider": "anthropic",
+        "model": "claude-opus-4",
+        "tokens_in": 8412,
+        "tokens_out": 611,
+        "tokens_total": 9023,
+        "cost_usd": 0.142,
+        "latency_ms": 3180,
+        "prompt_hash": "sha256:1f0c9d"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0002ZK9F3TQW02",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 2,
+      "ts": "2025-08-05T07:46:43.600Z",
+      "kind": "tool.request",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0002a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90001a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "tool": "Grep",
+        "schema_version": "1",
+        "sandbox": "seatbelt",
+        "egress_allowlist": "sha256:none",
+        "credential_handles": []
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0003ZK9F3TQW03",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 3,
+      "ts": "2025-08-05T07:46:43.612Z",
+      "kind": "policy.decision",
+      "actor": {
+        "kind": "system",
+        "id": "system:broker",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0003a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90002a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "tool": "Grep",
+        "decision": "allow",
+        "rule": "r-repo-read",
+        "capability": "repo.read"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0004ZK9F3TQW04",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 4,
+      "ts": "2025-08-05T07:46:43.990Z",
+      "kind": "tool.result",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0004a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90003a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "request_id": "ev-01JQ0002ZK9F3TQW02",
+        "outcome": "ok",
+        "result_hash": "sha256:aa31be",
+        "taint": false,
+        "duration_ms": 372
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0005ZK9F3TQW05",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 5,
+      "ts": "2025-08-05T07:46:44.400Z",
+      "kind": "tool.request",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0005a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90004a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": null,
+      "_subject": {
+        "tool": "Bash",
+        "schema_version": "1",
+        "sandbox": "seatbelt",
+        "args": "rm -rf ./build",
+        "credential_handles": []
+      },
+      "_attestation_state": "absent"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0006ZK9F3TQW06",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 6,
+      "ts": "2025-08-05T07:46:44.405Z",
+      "kind": "policy.decision",
+      "actor": {
+        "kind": "system",
+        "id": "system:broker",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0006a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90005a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "AAAAforgedsignaturebytesAAAA0000111122223333444455556666777788889="
+      },
+      "_subject": {
+        "tool": "Bash",
+        "decision": "allow",
+        "rule": "r-repo-read",
+        "capability": "repo.read"
+      },
+      "_attestation_state": "forged"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0007ZK9F3TQW07",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 7,
+      "ts": "2025-08-05T07:46:44.408Z",
+      "kind": "tool.result",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0007a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90006a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": null,
+      "_subject": {
+        "request_id": "ev-01JQ0005ZK9F3TQW05",
+        "outcome": "denied",
+        "result_hash": null,
+        "taint": false,
+        "duration_ms": 3
+      },
+      "_attestation_state": "absent"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0008ZK9F3TQW08",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 8,
+      "ts": "2025-08-05T07:46:45.200Z",
+      "kind": "sensor.verdict",
+      "actor": {
+        "kind": "system",
+        "id": "system:sensor",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0008a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90007a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "sensor": "ci/message-lint",
+        "kind": "computational",
+        "placement": "pre-write",
+        "verdict": "pass",
+        "blocked": false,
+        "fix": "name the action the reader should take in the message"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0009ZK9F3TQW09",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 9,
+      "ts": "2025-08-05T07:46:46.100Z",
+      "kind": "tool.request",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0009a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90008a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": null,
+      "_subject": {
+        "tool": "Write",
+        "schema_version": "1",
+        "sandbox": "seatbelt",
+        "credential_handles": [
+          "GANTRY_HANDLE_NPM"
+        ]
+      },
+      "_attestation_state": "absent"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0010ZK9F3TQW10",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 10,
+      "ts": "2025-08-05T07:46:46.108Z",
+      "kind": "policy.decision",
+      "actor": {
+        "kind": "system",
+        "id": "system:broker",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0010a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90009a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "tool": "Write",
+        "decision": "hold",
+        "rule": "r-write-needs-review",
+        "capability": "repo.write"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0011ZK9F3TQW11",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 11,
+      "ts": "2025-08-05T07:46:49.400Z",
+      "kind": "approval",
+      "actor": {
+        "kind": "human",
+        "id": "user:mariano@local",
+        "identity_source": "local",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0011a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90010a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "laptop-hsm-2",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "approver": "user:mariano@local",
+        "source": "local",
+        "verdict": "approve",
+        "decided": "repo.write on src/console.rs",
+        "policy": "r-write-needs-review",
+        "elapsed_ms": 3290
+      },
+      "_attestation_state": "unverified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0012ZK9F3TQW12",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 12,
+      "ts": "2025-08-05T07:46:49.800Z",
+      "kind": "tool.result",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0012a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "attestation": null,
+      "_subject": {
+        "request_id": "ev-01JQ0009ZK9F3TQW09",
+        "outcome": "ok",
+        "result_hash": "sha256:c41f7a",
+        "taint": false,
+        "duration_ms": 118
+      },
+      "_attestation_state": "absent"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0013ZK9F3TQW13",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 13,
+      "ts": "2025-08-05T07:46:50.200Z",
+      "kind": "capability.run",
+      "actor": {
+        "kind": "system",
+        "id": "system:broker",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0013a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90012a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "capability": "repo.write",
+        "rung": "assisted",
+        "outcome": "clean"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0014ZK9F3TQW14",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 14,
+      "ts": "2025-08-05T07:46:50.400Z",
+      "kind": "graph.query",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0014a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90013a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "graph": "gantry",
+        "symbol": "BrokerRun::call",
+        "hits": 4,
+        "bytes_read": 18422,
+        "index_bytes": 14100,
+        "stale_nodes": 1
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0015ZK9F3TQW15",
+      "run_id": "run-1754380000000",
+      "parent_id": null,
+      "seq": 15,
+      "ts": "2025-08-05T07:46:50.900Z",
+      "kind": "run.seal",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0015a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90014a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "outcome": "ok",
+        "events": 16,
+        "head": "sha256:4c9a71",
+        "cost_usd": 0.142
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0016ZK9F3TQW16",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 0,
+      "ts": "2025-08-05T07:56:40.000Z",
+      "kind": "run.open",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "bypassPermissions",
+        "diverged": [
+          "host_permissions.permission_mode"
+        ]
+      },
+      "subject_hash": "sha256:0016a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90015a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "profile": "laptop",
+        "workload": "instruction-drift",
+        "instruction_pack": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "restored_checkpoint": null
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0017ZK9F3TQW17",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 1,
+      "ts": "2025-08-05T07:56:40.450Z",
+      "kind": "skill.resolve",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0017a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90016a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "skill": "repo-audit",
+        "version": "2.1.0",
+        "verdict": "resolved",
+        "signature": "verified:skill-local-1",
+        "steps": 5,
+        "scope": [
+          "repo.read"
+        ]
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0018ZK9F3TQW18",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 2,
+      "ts": "2025-08-05T07:56:40.900Z",
+      "kind": "subagent.spawn",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0018a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90017a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "skill": "repo-audit",
+        "version": "2.1.0",
+        "granted": [
+          "repo.read"
+        ]
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0019ZK9F3TQW19",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 3,
+      "ts": "2025-08-05T07:56:41.500Z",
+      "kind": "model.call",
+      "actor": {
+        "kind": "system",
+        "id": "system:gateway",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0019a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90018a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4",
+        "tokens_in": 3110,
+        "tokens_out": 402,
+        "tokens_total": 3512,
+        "cost_usd": 0.021,
+        "latency_ms": 1440,
+        "prompt_hash": "sha256:7bd201"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0020ZK9F3TQW20",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 4,
+      "ts": "2025-08-05T07:56:42.200Z",
+      "kind": "tool.request",
+      "actor": {
+        "kind": "agent",
+        "id": "agent:reviewer",
+        "identity_source": "local",
+        "rung": "assisted"
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0020a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90019a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": null,
+      "_subject": {
+        "tool": "Bash",
+        "schema_version": "1",
+        "sandbox": "seatbelt",
+        "args": "git push origin main",
+        "credential_handles": []
+      },
+      "_attestation_state": "absent"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0021ZK9F3TQW21",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 5,
+      "ts": "2025-08-05T07:56:42.210Z",
+      "kind": "policy.decision",
+      "actor": {
+        "kind": "system",
+        "id": "system:broker",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0021a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90020a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "tool": "Bash",
+        "decision": "deny",
+        "rule": "r-irreversible-needs-led",
+        "capability": "vcs.publish"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0022ZK9F3TQW22",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 6,
+      "ts": "2025-08-05T07:56:42.600Z",
+      "kind": "sensor.verdict",
+      "actor": {
+        "kind": "system",
+        "id": "system:sensor",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0022a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90021a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "sensor": "ci/offline-suite",
+        "kind": "computational",
+        "placement": "pre-push",
+        "verdict": "broken",
+        "blocked": true,
+        "fix": "the sensor passed its own negative control, repair the control before trusting any verdict from it"
+      },
+      "_attestation_state": "verified"
+    },
+    {
+      "v": 2,
+      "id": "ev-01JQ0023ZK9F3TQW23",
+      "run_id": "run-1754380600000",
+      "parent_id": null,
+      "seq": 7,
+      "ts": "2025-08-05T07:56:43.000Z",
+      "kind": "score.snapshot",
+      "actor": {
+        "kind": "system",
+        "id": "system:scorer",
+        "identity_source": "none",
+        "rung": null
+      },
+      "authority": {
+        "profile": "laptop",
+        "policy_version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+        "instruction_version": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+        "settings_hash": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+        "permission_mode": "unobserved",
+        "diverged": []
+      },
+      "subject_hash": "sha256:0023a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "redacted": [],
+      "prev_hash": "sha256:90022a7c31d9e4b28f60517cc93ad4e8b2f0169d7ca35be1f4802d96e",
+      "attestation": {
+        "alg": "ed25519",
+        "key_id": "gateway-local-1",
+        "value": "5vPqk2mS0Jc8lM3xR7yTfA1wQeZbN4hUuXo9vC2rD6kLpG8sYtBjHnW5aEiFdKm3"
+      },
+      "_subject": {
+        "overall": 3,
+        "rules_version": "scoring-2",
+        "events_scored": 24
+      },
+      "_attestation_state": "verified"
+    }
+  ],
+  "total": 24,
+  "returned": 24,
+  "offset": 0
+}

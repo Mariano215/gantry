@@ -1,0 +1,58 @@
+{
+  "capabilities": [
+    {
+      "capability": "repo.read",
+      "declared_rung": "autonomous",
+      "earned_rung": "autonomous",
+      "clean_since_rung": 11,
+      "history": []
+    },
+    {
+      "capability": "repo.write",
+      "declared_rung": "assisted",
+      "earned_rung": "autonomous",
+      "clean_since_rung": 3,
+      "history": [
+        {
+          "ts": "2025-08-04T07:46:40.000Z",
+          "event_id": "ev-01JQ9001ZK9F3TQW91",
+          "kind": "rung.change",
+          "from": "led",
+          "to": "assisted",
+          "approver": "user:mariano@local"
+        },
+        {
+          "ts": "2025-08-05T07:46:50.200Z",
+          "event_id": "ev-01JQ0013ZK9F3TQW13",
+          "kind": "rung.change",
+          "from": "assisted",
+          "to": "autonomous",
+          "approver": "user:mariano@local"
+        }
+      ]
+    },
+    {
+      "capability": "vcs.publish",
+      "declared_rung": "led",
+      "earned_rung": "led",
+      "clean_since_rung": 0,
+      "history": []
+    },
+    {
+      "capability": "net.egress",
+      "declared_rung": "led",
+      "earned_rung": "led",
+      "clean_since_rung": 0,
+      "history": [
+        {
+          "ts": "2025-08-05T06:46:40.000Z",
+          "event_id": "ev-01JQ9002ZK9F3TQW92",
+          "kind": "rung.change",
+          "from": "assisted",
+          "to": "led",
+          "approver": null
+        }
+      ]
+    }
+  ]
+}
