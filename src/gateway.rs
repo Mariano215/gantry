@@ -195,6 +195,14 @@ impl GatewayRun {
         });
         let instruction_pack = authority["instruction_version"].clone();
         let settings_hash = authority["settings_hash"].clone();
+        // Same availability check the broker makes, because a model call under
+        // a profile this machine cannot provide is the same silent degradation
+        // as a tool call under one.
+        let unavailable = crate::policy::availability_check(
+            profile,
+            &pinned["profile_requirements"],
+            &crate::policy::Providable::for_this_build(crate::sandbox::backend_kind()),
+        )?;
         let signer = ActorSigner::declared(
             profile,
             &pinned["profile_requirements"],
@@ -212,6 +220,7 @@ impl GatewayRun {
                 "instruction_pack": instruction_pack,
                 "settings_hash": settings_hash,
                 "restored_checkpoint": null,
+                "unavailable": unavailable,
             }),
         )?;
         Ok(run)

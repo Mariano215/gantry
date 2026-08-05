@@ -30,6 +30,18 @@ pub struct Sandbox {
     kind: &'static str,
 }
 
+/// The isolation backend this host can provide, decided by whether the
+/// seatbelt binary is there. Readable without building a sandbox, because run
+/// open has to answer whether the profile's declared isolation is available at
+/// all before it appends its first event.
+pub fn backend_kind() -> &'static str {
+    if Path::new(SANDBOX_EXEC).exists() {
+        "seatbelt"
+    } else {
+        "none"
+    }
+}
+
 impl Sandbox {
     /// Builds the per-run sandbox. `egress_allow` comes from
     /// `profile_requirements.egress.allow`; each entry is `ip:port` in
@@ -61,11 +73,7 @@ impl Sandbox {
         // The shell itself needs the null device and its tty.
         profile
             .push_str("(allow file-write-data (literal \"/dev/null\") (literal \"/dev/tty\"))\n");
-        let kind = if Path::new(SANDBOX_EXEC).exists() {
-            "seatbelt"
-        } else {
-            "none"
-        };
+        let kind = backend_kind();
         Ok(Sandbox {
             profile,
             workdir,

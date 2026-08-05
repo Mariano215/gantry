@@ -138,6 +138,16 @@ impl BrokerRun {
                     .collect()
             })
             .unwrap_or_default();
+        // Availability, not divergence: a requirement nothing on this machine
+        // implements cannot be met by any run, so `on_unavailable: refuse`
+        // stops here, before an event exists. Under `degrade` the shortfall is
+        // recorded on run.open instead of being swallowed. The observed value
+        // comes from what runs; the check itself reads no system state.
+        let unavailable = crate::policy::availability_check(
+            &policy.profile,
+            &policy.profile_requirements,
+            &crate::policy::Providable::for_this_build(crate::sandbox::backend_kind()),
+        )?;
         // The actor key the profile declares. Resolved before anything is
         // appended: a declared key that will not load refuses the run here,
         // rather than the run continuing unsigned.
@@ -188,6 +198,7 @@ impl BrokerRun {
                     "workdir": run.sandbox.workdir().display().to_string(),
                     "egress_allow": egress_allow,
                 },
+                "unavailable": unavailable,
             }),
         )?;
         Ok(run)
