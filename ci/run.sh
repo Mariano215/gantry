@@ -112,8 +112,48 @@ for dep in ${(f)deps}; do
 done
 echo "all $(echo $deps | wc -w | tr -d ' ') dependencies documented"
 
-echo "== unenforced-rule census: CLAUDE.md markers are work items, not failures =="
-count=$(grep -c 'UNENFORCED' CLAUDE.md || true)
-echo "CLAUDE.md carries $count [UNENFORCED] marker line(s); gantry scan is expected to report them"
+echo "== gantry scan runs on this repo and every score names a path (ci/scan-evidence) =="
+# The census CLAUDE.md asks for is now the scan's own output rather than a
+# grep, and the check is that no number arrives bare: a score with nothing
+# behind it is the exact failure this command exists to refuse.
+# stderr is folded in so a fault arrives with its fix attached; only lines
+# starting "primitive " are read as scores, so nothing else can pass for one.
+if ! scan_out=$(cargo run --quiet -- scan . 2>&1); then
+  echo "gantry scan failed on this repository: $scan_out. Fix: run cargo run -- scan . and read the fault; the scan only reads, so a failure here is a bug in src/scan.rs rather than repository state to clean up"
+  exit 1
+fi
+scored=0
+for line in ${(f)scan_out}; do
+  case "$line" in
+    "primitive "*)
+      scored=$((scored + 1))
+      fields=(${(s:|:)line})
+      score=${fields[2]// /}
+      evidence=${${fields[3]}//[[:space:]]/}
+      if [ -z "$evidence" ]; then
+        echo "gantry scan reported a score with nothing behind it: $line. Fix: every branch in src/scan.rs builds an evidence string naming either the artifact found or every path looked in; a number with no path is an opinion, which is what docs/PRIMITIVES.md refuses"
+        exit 1
+      fi
+      case "$score" in
+        [0-3]) ;;
+        *)
+          echo "gantry scan reported score '$score' for: $line. Fix: a static read resolves absent (0), an artifact (2) and an artifact a check names (3); 4 and above is a claim about a control running and only gantry score over a ledger can make it"
+          exit 1
+          ;;
+      esac
+      ;;
+  esac
+done
+if [ "$scored" != 12 ]; then
+  echo "gantry scan reported $scored primitive lines, expected 12. Fix: PROBES in src/scan.rs carries one entry per primitive in docs/PRIMITIVES.md, and the report prints all of them, scored or not"
+  exit 1
+fi
+overall=$(echo "$scan_out" | sed -n 's/^overall \([0-9]*\) |.*/\1/p')
+if [ "$overall" -gt 3 ]; then
+  echo "the static scan of this repository scored overall $overall, above the ceiling a static read is allowed. Fix: a file shows a control is present, never that it ran; the telemetry score from zsh docs/proof/08-run.sh is the only number that can go higher, and a static scan that outranks it is measuring prose"
+  exit 1
+fi
+echo "12 primitive scores, each with a path behind it, static overall $overall (telemetry, from gantry score over a real ledger, is the number that can exceed 3)"
+echo "$scan_out" | sed -n '/UNENFORCED/,$p'
 
 echo "ci gate passed"

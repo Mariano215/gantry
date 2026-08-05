@@ -49,6 +49,7 @@ const USAGE: &str = "usage:
   gantry graph build <graph.json> <file>...
   gantry graph query <ledger-dir> <graph.json> <symbol>
   gantry graph compare <graph.json> <symbol> <file>...
+  gantry scan <repo-dir>                            (read-only, writes nothing)
   gantry score <ledger-dir> [scoring.json] [console.html]
   gantry console <ledger-dir> [127.0.0.1:port]
   gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
@@ -333,6 +334,15 @@ fn run() -> Result<i32, Fault> {
         }
         ["console", ledger_dir] => gantry::console::serve(ledger_dir, "127.0.0.1:0"),
         ["console", ledger_dir, addr] => gantry::console::serve(ledger_dir, addr),
+        ["scan", repo_dir] => {
+            // Read-only by construction: RepoRead is the only filesystem
+            // access the scanner has and it exposes no write. Nothing is
+            // appended to a ledger either, because a scan of somebody else's
+            // repository has no ledger to append to.
+            let repo = gantry::scan::RepoRead::open(Path::new(repo_dir))?;
+            print!("{}", gantry::scan::scan(&repo).text());
+            Ok(0)
+        }
         ["score", ledger_dir] => score(ledger_dir, "config/scoring.json", None),
         ["score", ledger_dir, rules] => score(ledger_dir, rules, None),
         ["score", ledger_dir, rules, console] => score(ledger_dir, rules, Some(console)),
