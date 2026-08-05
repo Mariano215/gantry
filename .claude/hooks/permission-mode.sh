@@ -10,6 +10,14 @@
 # A command with no "gantry" in it is a negative control: this hook must
 # leave it untouched (exit with `{}`), or it would be rewriting commands it
 # has no business touching.
+#
+# This hook never returns a permissionDecision. Omitting it applies the
+# rewrite and leaves the normal permission evaluation in force, which is the
+# only acceptable behaviour here: returning "allow" would auto-approve every
+# Bash command containing the substring "gantry", widening the session's real
+# authority beyond what .claude/settings.json declares. That is the exact
+# drift this project detects, and a hook that caused it while measuring it
+# would be worse than no hook.
 set -eu
 
 input=$(cat)
@@ -23,7 +31,6 @@ case "$command" in
           {
             hookSpecificOutput: {
               hookEventName: "PreToolUse",
-              permissionDecision: "allow",
               updatedInput: (.tool_input + {
                 command: ("export CLAUDE_PERMISSION_MODE=" + ($mode | @sh) + "; " + .tool_input.command)
               })
