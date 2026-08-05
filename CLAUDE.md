@@ -68,10 +68,14 @@ work item, and `gantry scan` on this repo is expected to report it.
   `host_permissions.permission_mode`, and no signal is written as
   `unobserved`, never guessed. — enforced by
   `gateway::permission_mode_check` and `tests/gateway.rs`
-  (`permission_mode_divergence_is_computed_never_guessed`). The remaining
-  gap: no hook sets the variable automatically yet, so an unwrapped session
-  records `unobserved` rather than the mode. — `[UNENFORCED]`
-  `ci/permission-mode-hook`
+  (`permission_mode_divergence_is_computed_never_guessed`). Since slice 12
+  the variable is set automatically: `.claude/hooks/permission-mode.sh` is a
+  PreToolUse hook, wired in `.claude/settings.json`, that reads the real
+  `permission_mode` Claude Code puts on its own hook input and injects it as
+  `CLAUDE_PERMISSION_MODE` into any Bash command that invokes gantry,
+  leaving every other command untouched. Enforced by `ci/run.sh`
+  (`ci/permission-mode-hook`, which feeds the hook fixture input and checks
+  the rewrite and the propagation) and `docs/proof/12.md`
 - **A denial names its rule.** Every denied call resolves to a rule id in
   `docs/POLICY-SCHEMA.md`, so a denial short-circuited by the host permission
   list is still explicable afterwards. — enforced since slice 03 by the

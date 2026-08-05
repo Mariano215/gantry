@@ -24,6 +24,38 @@ cargo run --quiet -- template validate templates/laptop
 echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects its negative control =="
 cargo run --quiet -- sensor live templates/laptop/config/sensors/*.json docs/proof/fixtures/no-private-key.json
 
+echo "== permission-mode hook injects the observed mode into gantry commands, leaves everything else alone (ci/permission-mode-hook) =="
+HOOK=.claude/hooks/permission-mode.sh
+untouched=$(echo '{"tool_input":{"command":"echo hello"},"permission_mode":"acceptEdits"}' | $HOOK)
+if [ "$untouched" != "{}" ]; then
+  echo "hook rewrote a command with no gantry in it: $untouched. Fix: the case match in .claude/hooks/permission-mode.sh must only touch commands containing \"gantry\""
+  exit 1
+fi
+no_mode=$(echo '{"tool_input":{"command":"echo gantry-hook-check"}}' | $HOOK)
+if [ "$no_mode" != "{}" ]; then
+  echo "hook rewrote a gantry command with no permission_mode observed: $no_mode. Fix: an absent signal must pass through untouched, never guessed"
+  exit 1
+fi
+rewritten=$(echo '{"tool_input":{"command":"echo gantry-hook-check"},"permission_mode":"bypassPermissions"}' | $HOOK | jq -r '.hookSpecificOutput.updatedInput.command')
+case "$rewritten" in
+  "export CLAUDE_PERMISSION_MODE="*"bypassPermissions"*"echo gantry-hook-check")
+    ;;
+  *)
+    echo "hook did not inject CLAUDE_PERMISSION_MODE into a gantry command: $rewritten. Fix: check the jq program in .claude/hooks/permission-mode.sh"
+    exit 1
+    ;;
+esac
+propagated=$(sh -c "$rewritten; printf '%s' \"\$CLAUDE_PERMISSION_MODE\"")
+case "$propagated" in
+  *bypassPermissions)
+    ;;
+  *)
+    echo "the exported env var did not reach the rewritten command: $propagated. Fix: the injected prefix must be \"export VAR=val; \" so it survives the whole sh -c invocation"
+    exit 1
+    ;;
+esac
+echo "hook injects the observed mode, leaves unrelated and unobserved commands untouched, and the export propagates through the rewritten command"
+
 echo "== every dependency has a note in docs/DEPENDENCIES.md =="
 deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
 for dep in ${(f)deps}; do

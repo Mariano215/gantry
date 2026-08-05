@@ -17,7 +17,18 @@
               "present": true
             }
           ],
-          "evidence": "instruction pack version-pinned on every run.open; no lifecycle telemetry, so capped at 3"
+          "evidence": "instruction pack version-pinned on every run.open"
+        },
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "sensor.verdict",
+              "pointer": "/message",
+              "equals": "instructions/pack.md changed without a matching review record. Review the new content, then append a line to config/instruction-reviews.jsonl with its current hash (shasum -a 256 instructions/pack.md), a reviewer, and a date."
+            }
+          ],
+          "evidence": "the instruction-lifecycle sensor caught a pack.md change with no matching review record: lifecycle telemetry, not just version pinning. The message equals its fix text, which only a failing verdict carries and only this sensor's check produces, so the predicate names one event, not two independent ones."
         }
       ]
     },
