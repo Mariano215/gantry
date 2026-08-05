@@ -68,6 +68,15 @@ work item, and `gantry scan` on this repo is expected to report it.
 - **Post-hoc review implies rollback.** Any capability whose rung and effect
   resolve to a `post` gate declares a rollback handle, or the policy refuses to
   load. — enforced since slice 03 by `Policy::validate`
+- **A skill is resolved or refused, never titled.** A skill package with
+  broken metadata, a missing referenced step, or a signature that no
+  registered key verifies is refused at resolve time; the resolver never
+  falls back to the id or title, and an unverifiable signature is refused
+  rather than downgraded to unsigned. — enforced since slice 09 by
+  `src/skills.rs` (`SkillManifest::resolve`); exercised by `tests/skills.rs`
+  and `docs/proof/09.md`. Delegation can only narrow scope, never widen it.
+  The gap: the key registry is passed per call, not yet a managed store. —
+  `[UNENFORCED]` `ci/skill-key-registry`
 - **A rung is derived, never stored.** The rung a capability holds is
   replayed from the ledger's `capability.run` and `rung.change` events, so a
   third party recomputes it from the signed record; promotion needs the

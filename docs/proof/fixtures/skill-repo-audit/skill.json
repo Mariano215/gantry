@@ -1,0 +1,20 @@
+{
+  "id": "repo-audit",
+  "version": "1.0",
+  "description": "Check out an untrusted repository and emit a signed findings report with an inclusion proof per finding.",
+  "steps": [
+    "checkout",
+    "scan",
+    "report"
+  ],
+  "scope": {
+    "capabilities": [
+      "repo.read"
+    ]
+  },
+  "signature": {
+    "alg": "ed25519",
+    "key_id": "ed25519:6c8f8607dbe87077",
+    "value": "59aaef9b391d8e50fa05613a5e415045fc12ef53c718a3b59cad3eb6bc469fe2ad204e5ee7351c7bb1b897893870d710063a440412bb389bd140a51aedc53a0b"
+  }
+}
