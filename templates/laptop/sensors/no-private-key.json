@@ -1,0 +1,9 @@
+{
+  "id": "no-private-key",
+  "kind": "computational",
+  "placement": "pre_integration",
+  "blocking": true,
+  "check": "! grep -q 'BEGIN PRIVATE KEY' {target}",
+  "fix": "Remove the embedded private key block from the document. Keep the finding text, but replace the key material with the words: [redacted, referenced by broker handle].",
+  "negative_control": "-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n"
+}

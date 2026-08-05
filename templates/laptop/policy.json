@@ -1,0 +1,142 @@
+{
+  "v": 1,
+  "profile": "laptop",
+  "profile_requirements": {
+    "isolation": {
+      "declared": "seatbelt",
+      "observed_by": "sandbox.active_backend",
+      "scores": 3
+    },
+    "egress": {
+      "declared": "allowlist",
+      "allow": [],
+      "observed_by": "sandbox.egress_allow"
+    },
+    "identity": {
+      "declared": "local",
+      "fallback_permitted": true,
+      "observed_by": "gateway.identity_source"
+    },
+    "ledger": {
+      "declared": "local_file",
+      "anchoring": "none",
+      "key_custody": "software",
+      "observed_by": "ledger.head"
+    },
+    "instruction_pack": {
+      "declared": "sha256:e087ac11abda95035cc13f487135e7be08c433b6faae3cbd81f3c62b2f906e34",
+      "observed_by": "gateway.instruction_hash"
+    },
+    "host_permissions": {
+      "declared": "sha256:5388e503200521c53b907a0cfda5abd784dad04e671bb325ada70a58236c8128",
+      "observed_by": "hook.settings_hash"
+    },
+    "rung_default": "autonomous",
+    "on_unavailable": "degrade"
+  },
+  "capabilities": [
+    {
+      "id": "repo.read",
+      "tools": ["Read(**)", "Grep(**)", "Glob(**)"],
+      "effect": "read",
+      "rung": "autonomous",
+      "credentials": []
+    },
+    {
+      "id": "repo.write",
+      "tools": ["Write(**)", "Edit(**)"],
+      "effect": "write.local",
+      "rung": "assisted",
+      "rollback": "git.worktree",
+      "sensors": ["ci/message-lint"]
+    },
+    {
+      "id": "vcs.publish",
+      "tools": ["Bash(git push:*)"],
+      "effect": "irreversible",
+      "rung": "led"
+    },
+    {
+      "id": "net.egress",
+      "tools": ["Bash(curl:*)", "Bash(wget:*)", "WebFetch(**)"],
+      "effect": "irreversible",
+      "rung": "led",
+      "credentials": ["api-token"]
+    },
+    {
+      "id": "shell.exec",
+      "tools": ["Bash(**)"],
+      "effect": "write.local",
+      "rung": "autonomous",
+      "rollback": "git.worktree"
+    }
+  ],
+  "rules": [
+    {
+      "id": "r-credential-file",
+      "match": {
+        "capability": "repo.read",
+        "target_in": ["./.env", "./.env.*", "**/*.pem", "**/id_rsa*", "./secrets/**"]
+      },
+      "action": "deny",
+      "message": "Reading a credential file is denied. Ask the broker for a handle and pass the handle name; the broker substitutes the value at the tool boundary."
+    },
+    {
+      "id": "r-destructive-shell",
+      "match": {
+        "capability": "shell.exec",
+        "target_in": ["rm -rf *", "rm -fr *", "sudo rm *", "git clean -fdx*", "dd if=*", "mkfs*"]
+      },
+      "action": "deny",
+      "message": "This command is destructive and its capability's rollback handle cannot recall it. Scope the deletion to a path the run owns, or route it through a capability whose rollback genuinely covers it."
+    },
+    {
+      "id": "r-egress-laptop",
+      "match": { "capability": "net.egress" },
+      "when": { "profile": "laptop" },
+      "action": "deny",
+      "message": "Egress is denied on the laptop profile, whose allowlist is empty. Add the host to profile_requirements.egress.allow and re-run, or perform this lookup outside the run and paste the result."
+    },
+    {
+      "id": "r-publish",
+      "match": { "capability": "vcs.publish" },
+      "action": "allow"
+    },
+    {
+      "id": "r-write-docs",
+      "match": { "capability": "repo.write", "target_in": ["docs/**"] },
+      "action": "allow"
+    },
+    {
+      "id": "r-read-repo",
+      "match": { "capability": "repo.read" },
+      "action": "allow"
+    },
+    {
+      "id": "r-shell",
+      "match": { "capability": "shell.exec" },
+      "action": "allow"
+    },
+    {
+      "id": "r-default",
+      "match": {},
+      "action": "deny",
+      "message": "No capability declares this tool. Add it to a capability in config/policy.json with an effect class and a rung, then re-run."
+    }
+  ],
+  "trust_budget": {
+    "promotion": {
+      "runs_at_rung": 20,
+      "zero_sensor_failures": true,
+      "zero_human_overrides": true,
+      "approver": "any",
+      "emits": "rung.change"
+    },
+    "demotion": {
+      "triggers": ["sensor.fail", "human.override", "policy.deny"],
+      "to": "one_rung_down",
+      "automatic": true,
+      "approval_required": false
+    }
+  }
+}

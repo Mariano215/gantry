@@ -49,7 +49,9 @@ const USAGE: &str = "usage:
   gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
   gantry skill delegate <parent-caps-csv> <package-dir>
   gantry skill run <ledger-dir> <package-dir> <parent-caps-csv>
-  gantry skill sign <package-dir> <seed-hex>";
+  gantry skill sign <package-dir> <seed-hex>
+  gantry template validate <template-dir>
+  gantry template init <template-dir> <dest-dir>";
 
 fn main() {
     match run() {
@@ -283,6 +285,8 @@ fn run() -> Result<i32, Fault> {
             skill_run(ledger_dir, package_dir, parent_caps)
         }
         ["skill", "sign", package_dir, seed_hex] => skill_sign(package_dir, seed_hex),
+        ["template", "validate", template_dir] => template_validate(template_dir).map(|_| 0),
+        ["template", "init", template_dir, dest_dir] => template_init(template_dir, dest_dir),
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -719,6 +723,111 @@ fn skill_run(ledger_dir: &str, package_dir: &str, parent_caps: &str) -> Result<i
         sealed.size
     );
     Ok(if failures == 0 { 0 } else { 1 })
+}
+
+/// A harness template is a bundle of policy, providers, sensors and signing
+/// keys that must validate as a whole: every part loads through the same
+/// validator the running system uses, so a template cannot ship a
+/// configuration the platform would refuse at runtime. Returns the file list
+/// for `template init` to copy.
+fn template_validate(template_dir: &str) -> Result<Vec<std::path::PathBuf>, Fault> {
+    let dir = Path::new(template_dir);
+    let mut files = Vec::new();
+
+    let policy_path = dir.join("policy.json");
+    let policy = Policy::load(&policy_path)?;
+    files.push(policy_path);
+
+    let providers_path = dir.join("providers.json");
+    let providers = gateway::load_providers(&providers_path)?;
+    files.push(providers_path);
+
+    let mut sensor_count = 0usize;
+    let sensors_dir = dir.join("sensors");
+    if sensors_dir.is_dir() {
+        let entries = fs::read_dir(&sensors_dir).map_err(|e| {
+            Fault::new(
+                format!("cannot list {}: {e}", sensors_dir.display()),
+                "check the sensors directory is readable",
+            )
+        })?;
+        for entry in entries {
+            let path = entry
+                .map_err(|e| {
+                    Fault::new(
+                        format!("cannot read an entry in {}: {e}", sensors_dir.display()),
+                        "check the sensors directory is readable",
+                    )
+                })?
+                .path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                Sensor::load(&path)?;
+                sensor_count += 1;
+                files.push(path);
+            }
+        }
+    }
+
+    let keys_path = dir.join("skill-keys.json");
+    let key_count = if keys_path.exists() {
+        let n = gantry::skills::KeyRegistry::load(&keys_path)?.keys.len();
+        files.push(keys_path);
+        n
+    } else {
+        0
+    };
+
+    println!(
+        "template {template_dir} validates: profile {}, {} capabilities, {} rules, {} provider(s), {} sensor(s), {} signing key(s)",
+        policy.profile,
+        policy.capabilities.len(),
+        policy.rules.len(),
+        providers.len(),
+        sensor_count,
+        key_count
+    );
+    Ok(files)
+}
+
+/// Copy a validated template into a new harness directory. Validation runs
+/// first, so a broken bundle is refused before a single file lands, and an
+/// existing file is never overwritten.
+fn template_init(template_dir: &str, dest_dir: &str) -> Result<i32, Fault> {
+    let files = template_validate(template_dir)?;
+    let src_root = Path::new(template_dir);
+    let dest_root = Path::new(dest_dir);
+    for src in &files {
+        let rel = src.strip_prefix(src_root).map_err(|_| {
+            Fault::new(
+                format!("{} is outside the template directory", src.display()),
+                "report this as a bug; validate only returns paths under the template",
+            )
+        })?;
+        let dest = dest_root.join(rel);
+        if dest.exists() {
+            return Err(Fault::new(
+                format!("{} already exists", dest.display()),
+                "init refuses to overwrite; move the existing file away or choose an empty destination",
+            ));
+        }
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                Fault::new(
+                    format!("cannot create {}: {e}", parent.display()),
+                    "check the destination is writable",
+                )
+            })?;
+        }
+        fs::copy(src, &dest).map_err(|e| {
+            Fault::new(
+                format!("cannot copy {} to {}: {e}", src.display(), dest.display()),
+                "check the destination is writable",
+            )
+        })?;
+        println!("wrote {}", dest.display());
+    }
+    println!("harness initialised at {dest_dir} from template {template_dir}");
+    Ok(0)
 }
 
 /// Sign a package's skill.json in place with the given ed25519 seed and print
