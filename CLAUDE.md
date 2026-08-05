@@ -65,6 +65,14 @@ work item, and `gantry scan` on this repo is expected to report it.
 - **Post-hoc review implies rollback.** Any capability whose rung and effect
   resolve to a `post` gate declares a rollback handle, or the policy refuses to
   load. — enforced since slice 03 by `Policy::validate`
+- **A sensor that cannot fail is broken, not clean.** Every sensor declares a
+  negative control it must reject; a sensor that passes its own negative
+  control is reported as `broken`, never as a clean pass, so a green board of
+  dead sensors is impossible. — enforced since slice 05 by `src/sensor.rs`
+  (`Sensor::is_live` runs before any trusted verdict); exercised by
+  `tests/sensor.rs` and `docs/proof/05.md`. The gap: liveness is checked at
+  evaluation time, not continuously, so a sensor that rots between runs is
+  caught on next use, not immediately. — `[UNENFORCED]` `ci/sensor-liveness-schedule`
 - **An attestation is verified or declared unverified, never assumed.** The
   ledger verifier checks actor attestations against a registered key once a
   key registry exists; until then it counts them and says so in every report.
@@ -76,7 +84,9 @@ work item, and `gantry scan` on this repo is expected to report it.
   binary serves — no second process in the container.
 - Errors carry a fix, not just a cause. A sensor verdict or a policy denial is
   read by an agent, so the message must name the action to take. — enforced by
-  `ci/message-lint`
+  `ci/message-lint`; since slice 05 a sensor whose `fix` is empty refuses to
+  load (`Sensor::validate`), and a policy deny or hold rule with no message
+  refuses to load (`Policy::validate`)
 - No `unwrap` or `expect` outside tests and `main`. — enforced by clippy
 - Public types that appear in the event schema derive canonical JSON
   serialisation; field order and naming are schema-breaking changes.

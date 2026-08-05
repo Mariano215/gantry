@@ -7,6 +7,7 @@ use gantry::event::NewEvent;
 use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::policy::Policy;
+use gantry::sensor::{Sensor, SensorRun, Verdict};
 use gantry::Fault;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -27,7 +28,9 @@ const USAGE: &str = "usage:
   gantry policy check <policy.json> [settings.json]
   gantry broker register <ledger-dir> <tool-def.json>
   gantry broker call <ledger-dir> <tool> <target>
-  gantry audit <ledger-dir> <providers.json> <provider> <file>";
+  gantry audit <ledger-dir> <providers.json> <provider> <file>
+  gantry sensor gate <ledger-dir> <sensor.json> <artifact>
+  gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>";
 
 fn main() {
     match run() {
@@ -218,6 +221,17 @@ fn run() -> Result<i32, Fault> {
         ["audit", ledger_dir, providers_path, provider_name, file] => {
             audit(ledger_dir, providers_path, provider_name, file)
         }
+        ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
+            sensor_gate(ledger_dir, sensor_path, artifact, None)
+        }
+        ["sensor", "repair", ledger_dir, sensor_path, artifact, providers_path, provider_name] => {
+            sensor_gate(
+                ledger_dir,
+                sensor_path,
+                artifact,
+                Some((providers_path, provider_name)),
+            )
+        }
         [] => Err(usage_fault("no subcommand given")),
         _ => Err(usage_fault(format!("unknown command: {}", args.join(" ")))),
     }
@@ -315,6 +329,135 @@ fn audit(
     let head = run.seal("complete")?;
     println!("sealed at ledger size {}", head.size);
     Ok(exit)
+}
+
+/// Runs one sensor against an artifact and records the verdict. With a
+/// provider, a blocking failure triggers one autonomous repair turn: the
+/// model is given the artifact and the sensor's fix message, its output
+/// replaces the artifact, and the sensor reruns. Both verdicts land on the
+/// ledger, which is the "agent corrects on rerun, no human in the loop"
+/// arc the proof needs.
+fn sensor_gate(
+    ledger_dir: &str,
+    sensor_path: &str,
+    artifact: &str,
+    repair: Option<(&str, &str)>,
+) -> Result<i32, Fault> {
+    let sensor = Sensor::load(Path::new(sensor_path))?;
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let policy_version = policy.policy_version.clone().unwrap_or_default();
+    let dir = Path::new(ledger_dir);
+    let ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let settings_path = Path::new(".claude/settings.json");
+    let pin = Pinning {
+        policy: "config/policy.json".into(),
+        instructions: Path::new("instructions/pack.md").into(),
+        settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+        diverged: settings_divergence(settings_path),
+    };
+    let mut run = SensorRun::open(
+        ledger,
+        &policy.profile,
+        &policy_version,
+        &format!("sensor:{}", sensor.id),
+        &pin,
+    )?;
+
+    let artifact_path = Path::new(artifact);
+    let first = run.gate(&sensor, artifact_path)?;
+    report_verdict("attempt 1", &first);
+
+    let mut exit = verdict_exit(&first);
+    if first.verdict == Verdict::Fail && first.blocked {
+        if let Some((providers_path, provider_name)) = repair {
+            println!("[bus] blocking failure; asking the model to repair the artifact");
+            repair_artifact(&sensor, artifact_path, providers_path, provider_name)?;
+            let second = run.gate(&sensor, artifact_path)?;
+            report_verdict("attempt 2, after repair", &second);
+            exit = verdict_exit(&second);
+        }
+    }
+    let head = run.seal()?;
+    println!("sealed at ledger size {}", head.size);
+    Ok(exit)
+}
+
+fn verdict_exit(v: &gantry::sensor::SensorVerdict) -> i32 {
+    match v.verdict {
+        Verdict::Pass => 0,
+        _ => 1,
+    }
+}
+
+fn report_verdict(label: &str, v: &gantry::sensor::SensorVerdict) {
+    let verdict = serde_json::to_value(v)
+        .ok()
+        .and_then(|j| j["verdict"].as_str().map(String::from))
+        .unwrap_or_default();
+    println!(
+        "[{label}] sensor {} -> {verdict} (blocked: {})",
+        v.sensor, v.blocked
+    );
+    if let Some(m) = &v.message {
+        println!("    {m}");
+    }
+}
+
+/// One repair turn through the gateway. The model never sees a tool; it is
+/// asked to return the corrected artifact text, and its reply becomes the
+/// new artifact. The sensor, not the model, decides whether the repair took.
+fn repair_artifact(
+    sensor: &Sensor,
+    artifact: &Path,
+    providers_path: &str,
+    provider_name: &str,
+) -> Result<(), Fault> {
+    let providers = gateway::load_providers(Path::new(providers_path))?;
+    let provider = providers
+        .iter()
+        .find(|p| p.name == *provider_name)
+        .ok_or_else(|| {
+            Fault::new(
+                format!("no provider named {provider_name} in {providers_path}"),
+                "name a provider present in the providers file",
+            )
+        })?;
+    let broken = read_file(&artifact.display().to_string())?;
+    let system = "You repair documents to satisfy an automated check. Return only the corrected document, no preamble, no code fences.";
+    let user = format!(
+        "A sensor rejected this document with the instruction: {}\n\nReturn the corrected document in full.\n\n--- document ---\n{}\n--- end ---",
+        sensor.fix, broken
+    );
+    // A throwaway gateway run so the repair call is itself on a ledger; the
+    // repair's evidence lives beside the sensor run rather than inside it.
+    let dir = std::env::temp_dir().join(format!("gantry-repair-{}", std::process::id()));
+    let ledger = Ledger::init(&dir)?;
+    let mut grun = GatewayRun::open(
+        ledger,
+        "sensor-repair",
+        &Pinning {
+            policy: "config/policy.json".into(),
+            instructions: Path::new("instructions/pack.md").into(),
+            settings: None,
+            diverged: vec![],
+        },
+    )?;
+    let answer = grun.call(provider, &[msg("system", system), msg("user", &user)])?;
+    grun.seal("complete")?;
+    fs::write(artifact, answer.content.trim()).map_err(|e| {
+        Fault::new(
+            format!(
+                "cannot write the repaired artifact {}: {e}",
+                artifact.display()
+            ),
+            "check the artifact path is writable",
+        )
+    })?;
+    Ok(())
 }
 
 /// Opens (or initialises) the ledger and a broker run against the tracked
