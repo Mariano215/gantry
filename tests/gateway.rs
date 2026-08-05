@@ -136,10 +136,7 @@ fn call_appends_model_call_event() {
     let call: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
     assert_eq!(call["kind"], "model.call");
     // Subject lives behind subject_hash; read it from payloads/.
-    let s_hex = call["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
-    let subject: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{s_hex}.json"))).unwrap())
-            .unwrap();
+    let subject = read_subject(&led, 1);
     assert_eq!(subject["provider"], "stub");
     assert_eq!(subject["outcome"], "ok");
     assert_eq!(subject["tokens"], serde_json::json!({"prompt": 42, "completion": 7}));
@@ -149,11 +146,7 @@ fn call_appends_model_call_event() {
     assert!(subject.get("messages").is_none(), "raw prompt never in the subject");
 
     // seal carries the accumulated cost
-    let seal: serde_json::Value = serde_json::from_str(lines.lines().nth(2).unwrap()).unwrap();
-    let seal_hex = seal["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
-    let seal_subject: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{seal_hex}.json"))).unwrap())
-            .unwrap();
+    let seal_subject = read_subject(&led, 2);
     assert!(seal_subject["cost_total_usd"].as_f64().unwrap() > 0.0);
 }
 
@@ -192,10 +185,7 @@ fn provider_error_never_leaks_the_key_onto_the_ledger() {
     let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
     let call: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
     assert_eq!(call["kind"], "model.call");
-    let s_hex = call["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
-    let subject: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{s_hex}.json"))).unwrap())
-            .unwrap();
+    let subject = read_subject(&led, 1);
     assert_eq!(subject["outcome"], "error");
 
     // Every file the run touched (events, heads, payloads) must be sentinel-free.
