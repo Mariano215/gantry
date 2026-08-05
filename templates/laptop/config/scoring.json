@@ -1,5 +1,5 @@
 {
-  "rules_version": "scoring-2",
+  "rules_version": "scoring-3",
   "rules": [
     {
       "primitive": 1,
@@ -187,6 +187,22 @@
             }
           ],
           "evidence": "a rung earned promotion under a named approver"
+        },
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "policy.decision",
+              "pointer": "/verdict",
+              "equals": "hold"
+            },
+            {
+              "kind": "approval",
+              "pointer": "/call_hash",
+              "present": true
+            }
+          ],
+          "evidence": "a human gate ran at an irreversible step: the policy held a call before it executed, and a human answered that call on the record. The predicates name the gate firing and an answer existing, never which answer it was: a refusal is the gate working, and a rule that scored an approval higher than a refusal would pay for saying yes. The answer is matched on call_hash because the same event kind also carries a rung promotion's approval, which every ledger reaching level 3 already has, and a predicate satisfied by that would credit level 4 for level 3's evidence."
         }
       ]
     },
@@ -304,6 +320,20 @@
             }
           ],
           "evidence": "authority-as-code produced a named denial; permission-mode divergence is recorded per event when the host exposes the mode, unobserved otherwise"
+        },
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "drift.report"
+            },
+            {
+              "kind": "run.open",
+              "pointer": "/unavailable",
+              "present": true
+            }
+          ],
+          "evidence": "the declaration is checked against the running system rather than assumed: gantry drift walked the profile requirements and reported one event per field, and every run open recorded which declared requirements this machine could not provide (an empty list when it provided them all, which is why the list is never absent). Both predicates name the walk having run, never what it found: a ledger of matches and a ledger of divergences are the same control working, and scoring them differently would pay for breakage."
         }
       ]
     }

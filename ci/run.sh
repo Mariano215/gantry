@@ -323,6 +323,106 @@ for dep in ${(f)deps}; do
 done
 echo "all $(echo $deps | wc -w | tr -d ' ') dependencies documented"
 
+echo "== a scoring level credits a control running, never what it found (ci/scoring-outcome-neutral) =="
+# Proof 13's first scoring rule credited the instruction-lifecycle sensor's
+# failure message: a repository whose control passed scored 3, one whose
+# control was broken scored 4, and the way to raise the number was to break the
+# check. This asserts the property that would have caught it, against the
+# tracked rules and the real binary rather than against hand-written events.
+# For each level that credits a control, two ledgers differing only in what the
+# control found must score the same, and a ledger where it never ran must score
+# lower. Statuses are read, not output text: the approve path must release the
+# call and the deny path must not, and the divergent walk must exit non-zero,
+# or the two ledgers being compared did not actually differ and the equality is
+# worth nothing.
+sc_bin="$PWD/target/debug/gantry"
+sc_work=$(mktemp -d)
+sc_publish='git push gantry-ci-no-such-remote HEAD'
+echo "clean finding" > "$sc_work/art.md"
+sc_score() { # ledger, primitive line prefix -> that primitive's score
+  "$sc_bin" score "$1" config/scoring.json 2>/dev/null \
+    | awk -F'|' -v p="$2" 'index($2, p) {gsub(/ /,"",$3); print $3}'
+}
+sc_hold() { # ledger -> the request id of a call the policy holds
+  if "$sc_bin" broker call "$1" Bash "$sc_publish" >/dev/null 2>&1; then
+    echo "the policy did not hold an irreversible call, so nothing here tests a human gate. Fix: vcs.publish is irreversible at rung led and gate() in src/policy.rs turns that into a pre gate; check config/policy.json still declares it"
+    exit 1
+  fi
+  local h=$(jq -rs '[.[] | select(.kind=="tool.request")] | last | .subject_hash' \
+    "$1/events.jsonl" | sed 's/^sha256://')
+  jq -r '.request_id' "$1/payloads/$h.json"
+}
+# One base ledger carrying levels 2 and 3 of both primitives (capability runs,
+# a promotion under a named approver, a named denial), copied per variant so
+# the promotion is paid for once.
+sc_base="$sc_work/base"
+sc_i=1
+sc_threshold=$(jq -r '.trust_budget.promotion.runs_at_rung' config/policy.json)
+while [ $sc_i -le $sc_threshold ]; do
+  "$sc_bin" orchestrate step "$sc_base" repo.write docs/proof/fixtures/no-private-key.json \
+    "$sc_work/art.md" user:ci@local >/dev/null
+  sc_i=$((sc_i + 1))
+done
+"$sc_bin" broker call "$sc_base" Bash "rm -rf /" >/dev/null 2>&1 || true
+
+cp -R "$sc_base" "$sc_work/approved"
+sc_req=$(sc_hold "$sc_work/approved")
+if ! "$sc_bin" approve "$sc_work/approved" "$sc_req" user:ci@local >/dev/null; then
+  echo "gantry approve refused to record an approval for a held call. Fix: run the command by hand and read the fault; approve() in src/main.rs pairs each tool.request with the decision that answers it"
+  exit 1
+fi
+if ! "$sc_bin" broker call "$sc_work/approved" Bash "$sc_publish" >/dev/null 2>&1; then
+  echo "an approved call was not released on retry, so this check is not comparing an approval with a refusal. Fix: usable_grant in src/broker.rs binds a grant to the call hash; see docs/proof/14.md"
+  exit 1
+fi
+cp -R "$sc_base" "$sc_work/refused"
+sc_req=$(sc_hold "$sc_work/refused")
+"$sc_bin" approve "$sc_work/refused" "$sc_req" user:ci@local deny >/dev/null
+if "$sc_bin" broker call "$sc_work/refused" Bash "$sc_publish" >/dev/null 2>&1; then
+  echo "a recorded refusal released the call it refused. Fix: the broker consults grants only on the hold branch and a deny verdict releases nothing; see src/broker.rs"
+  exit 1
+fi
+cp -R "$sc_base" "$sc_work/unanswered"
+sc_hold "$sc_work/unanswered" >/dev/null
+sc_yes=$(sc_score "$sc_work/approved" '07 Orchestration')
+sc_no=$(sc_score "$sc_work/refused" '07 Orchestration')
+sc_none=$(sc_score "$sc_work/unanswered" '07 Orchestration')
+if [ "$sc_yes" != "$sc_no" ]; then
+  echo "an approved call scored $sc_yes for primitive 07 and a refused one scored $sc_no. Fix: the level must name the gate having run, never the answer; a refusal is the gate working, and paying more for a yes rewards approving everything"
+  exit 1
+fi
+if [ "$sc_none" -ge "$sc_yes" ]; then
+  echo "a held call nobody answered scored $sc_none for primitive 07, against $sc_yes for one a human answered. Fix: the level credits nothing as written; note that a rung promotion writes its own approval event, so the predicate has to match on call_hash"
+  exit 1
+fi
+
+cp -R config "$sc_work/config-diverged"
+jq '.profile_requirements.instruction_pack.declared = "sha256:0000000000000000000000000000000000000000000000000000000000000000"' \
+  config/policy.json > "$sc_work/config-diverged/policy.json"
+cp -R "$sc_base" "$sc_work/drift-clean"
+if ! "$sc_bin" drift "$sc_work/drift-clean" config/policy.json >/dev/null; then
+  echo "the drift walk over the tracked policy exited non-zero here, so the clean and divergent ledgers below are not distinguishable. Fix: ci/drift-honest above requires the tracked policy to come back clean; fix that first"
+  exit 1
+fi
+cp -R "$sc_base" "$sc_work/drift-diverged"
+if "$sc_bin" drift "$sc_work/drift-diverged" "$sc_work/config-diverged/policy.json" >/dev/null; then
+  echo "a policy declaring an instruction pack hash the running system does not have walked clean. Fix: src/drift.rs must report a divergence and exit 1; a check comparing two clean walks proves nothing"
+  exit 1
+fi
+cp -R "$sc_base" "$sc_work/no-drift"
+sc_match=$(sc_score "$sc_work/drift-clean" '12 Governance')
+sc_diverged=$(sc_score "$sc_work/drift-diverged" '12 Governance')
+sc_unwalked=$(sc_score "$sc_work/no-drift" '12 Governance')
+if [ "$sc_match" != "$sc_diverged" ]; then
+  echo "a clean drift walk scored $sc_match for primitive 12 and a divergent one scored $sc_diverged. Fix: the level must name the walk having run, never its verdict; a ledger of matches and a ledger of divergences are the same control working"
+  exit 1
+fi
+if [ "$sc_unwalked" -ge "$sc_match" ]; then
+  echo "a ledger with no drift walk scored $sc_unwalked for primitive 12, against $sc_match for one with a walk. Fix: the level credits nothing as written"
+  exit 1
+fi
+echo "primitive 07: approve and deny both score $sc_yes, an unanswered hold scores $sc_none. Primitive 12: match and divergence both score $sc_match, an unwalked ledger scores $sc_unwalked"
+
 echo "== gantry scan runs on this repo and every score names a path (ci/scan-evidence) =="
 # The census CLAUDE.md asks for is now the scan's own output rather than a
 # grep, and the check is that no number arrives bare: a score with nothing

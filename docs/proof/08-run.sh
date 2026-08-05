@@ -25,6 +25,20 @@ EOF
 $BIN broker register $L $WORK/loose.json 2>/dev/null || true
 $BIN broker call $L Read docs/PLAN.md >/dev/null 2>&1 || true
 
+# Orchestration (7): a human gate at an irreversible step. vcs.publish is
+# irreversible at rung led, so the policy holds the call; gantry approve
+# answers it on the record and the retry spends the grant. The remote does not
+# exist, so the released command fails locally and reaches no network: what the
+# level scores is the gate running and a human answering, never the answer and
+# never the command's exit status. A self-audit that never holds a call has no
+# human gate to credit, which is why this leg exists rather than the rule alone.
+PUBLISH='git push gantry-self-audit-no-such-remote HEAD'
+$BIN broker call $L Bash "$PUBLISH" >/dev/null 2>&1 || true
+REQ_HASH=$(jq -rs '[.[] | select(.kind=="tool.request")] | last | .subject_hash' $L/events.jsonl | sed 's/^sha256://')
+REQ=$(jq -r '.request_id' $L/payloads/$REQ_HASH.json)
+$BIN approve $L $REQ user:mariano@local >/dev/null
+$BIN broker call $L Bash "$PUBLISH" >/dev/null 2>&1 || true
+
 # Sensor: a passing verdict and a broken sensor (10).
 echo "clean finding" > $WORK/art.md
 $BIN sensor gate $L docs/proof/fixtures/no-private-key.json $WORK/art.md >/dev/null 2>&1 || true
@@ -54,6 +68,13 @@ $BIN graph query $L $WORK/graph.json harness >/dev/null
 for n in 1 2 3; do echo "step $n" > $WORK/s$n.md; done
 set +e; $BIN durable run $L selfaudit 1 $WORK/s1.md $WORK/s2.md $WORK/s3.md >/dev/null 2>&1; set -e
 $BIN durable resume $L selfaudit $WORK/s1.md $WORK/s2.md $WORK/s3.md >/dev/null
+
+# Governance (12): walk the tracked profile requirements and report every
+# field. The exit status is deliberately not read here. A divergence exits 1
+# and a clean walk exits 0, and the level scores the same either way, so
+# reading it would suggest the outcome is what earns the number. ci/drift-honest
+# is where the tracked policy is required to come back clean.
+$BIN drift $L config/policy.json >/dev/null 2>&1 || true
 
 echo "== score the platform with itself =="
 $BIN score $L config/scoring.json $WORK/console.html
