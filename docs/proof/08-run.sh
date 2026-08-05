@@ -37,6 +37,10 @@ i=1; while [ $i -le $THRESHOLD ]; do
   i=$((i + 1))
 done
 
+# Skill: resolve against the managed key registry, then execute the steps
+# as a delegated sub-agent run (8, 9).
+$BIN skill run $L docs/proof/fixtures/skill-repo-audit repo.read,repo.write >/dev/null
+
 # Graph: a ledgered retrieval, so context management is telemetry (3).
 $BIN graph build $WORK/graph.json docs/CONCEPT.md docs/PLAN.md >/dev/null
 $BIN graph query $L $WORK/graph.json harness >/dev/null

@@ -276,6 +276,42 @@ fn unregistered_tool_never_reaches_the_policy() {
     );
 }
 
+/// Resolve-to-execute wiring: a delegated run records subagent.spawn, an
+/// in-grant call executes, and a call whose capability is outside the grant
+/// is denied at the chokepoint with rule r-delegation, not by the runner's
+/// diligence.
+#[test]
+fn a_delegated_grant_narrows_the_chokepoint() {
+    let dir = workdir("delegated");
+    let f = dir.join("step.md");
+    fs::write(&f, "step body").unwrap();
+    let (mut run, led) = open_run(&dir, "delegated");
+    run.delegate_scope("repo-audit", "1.0", &["repo.read".into()])
+        .unwrap();
+    let ok = run.call("Read", &f.display().to_string()).unwrap();
+    assert_eq!(ok.content, "step body");
+    let fault = run.call("Bash", "echo outside the grant").unwrap_err();
+    run.seal("complete").unwrap();
+    assert!(fault.cause.contains("r-delegation"), "{fault}");
+    assert!(fault.fix.contains("delegated grant"), "{fault}");
+
+    let evs = events(&led);
+    let spawn = evs
+        .iter()
+        .find(|e| e["kind"] == json!("subagent.spawn"))
+        .expect("subagent.spawn on the ledger");
+    let spawn_subject = subject(&led, spawn);
+    assert_eq!(spawn_subject["granted"], json!(["repo.read"]));
+    let denied = evs
+        .iter()
+        .filter(|e| e["kind"] == json!("policy.decision"))
+        .map(|e| subject(&led, e))
+        .find(|s| s["verdict"] == json!("deny"))
+        .expect("the out-of-grant denial is on the ledger");
+    assert_eq!(denied["rule"], "r-delegation");
+    assert_eq!(denied["capability"], "shell.exec");
+}
+
 /// ci/gate-uses-earned-rung: a demotion on the ledger tightens the broker's
 /// gate on the next call. shell.exec declares autonomous (gate post for
 /// write.local); after a recorded demotion to led, the same call holds pre,

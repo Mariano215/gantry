@@ -54,8 +54,8 @@ would hide.
 | 05 | Execution environment | 4 | Commands run inside a seatbelt sandbox, recorded per request. |
 | 06 | Durable state | 3 | A run resumed from a checkpoint: the seam is on the record. |
 | 07 | Orchestration | 3 | A rung earned promotion under a named approver. |
-| 08 | Sub-agents | 3 | Delegation narrows scope and refuses to widen; no per-sub-agent run telemetry yet. |
-| 09 | Skills | 3 | Signed skill packages resolved or refused, never titled; key registry still per-call. |
+| 08 | Sub-agents | 3 | A delegated run records subagent.spawn, and the chokepoint denies an out-of-grant call with rule r-delegation. |
+| 09 | Skills | 3 | Signed skill packages resolved against the managed key registry or refused, never titled; resolved steps execute through the broker under the delegated grant. |
 | 10 | Verification | 4 | A sensor that could not fail was reported broken, not clean. |
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
 | 12 | Governance | 3 | Authority-as-code produced a named denial; permission-mode drift still unobserved, capping at 3. |

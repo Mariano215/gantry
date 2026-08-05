@@ -101,6 +101,9 @@ pub struct BrokerRun {
     sandbox: Sandbox,
     credentials: CredentialBroker,
     cost_total_usd: f64,
+    /// When set, this run executes under a delegated grant and a call whose
+    /// capability is outside it is denied at the chokepoint.
+    grant: Option<Vec<String>>,
 }
 
 impl BrokerRun {
@@ -161,6 +164,7 @@ impl BrokerRun {
             sandbox,
             credentials,
             cost_total_usd: 0.0,
+            grant: None,
         };
         run.core.append(
             "run.open",
@@ -210,6 +214,30 @@ impl BrokerRun {
 
     pub fn run_id(&self) -> &str {
         self.core.run_id()
+    }
+
+    /// Narrow this run to a delegated grant: the subagent.spawn event puts
+    /// the skill and its granted capabilities on the record, and from here
+    /// on a call whose matched capability is outside the grant is denied at
+    /// the chokepoint with rule r-delegation. Executing a resolved skill is
+    /// this plus ordinary calls; the narrowing is enforced where every call
+    /// already passes, not in the skill runner's diligence.
+    pub fn delegate_scope(
+        &mut self,
+        skill_id: &str,
+        skill_version: &str,
+        granted: &[String],
+    ) -> Result<(), Fault> {
+        self.core.append(
+            "subagent.spawn",
+            json!({
+                "skill": skill_id,
+                "version": skill_version,
+                "granted": granted,
+            }),
+        )?;
+        self.grant = Some(granted.to_vec());
+        Ok(())
     }
 
     /// Registers the two in-process tools this slice executes. Their
@@ -302,11 +330,25 @@ impl BrokerRun {
         // rung the policy asserts. A demotion recorded by the orchestrator
         // therefore tightens this gate on the very next call.
         let history = self.core.replayable_events()?;
-        let decision = self
+        let mut decision = self
             .policy
             .decide_with_earned(&call, &self.identity, &|cap_id, declared| {
                 crate::trust::TrustState::replay(&history, cap_id, declared).rung
             })?;
+        // The delegated grant is checked at the same chokepoint, before the
+        // one decision event is written, so a sub-agent's denial names its
+        // rule like any other.
+        if let (Some(grant), Some(cap)) = (&self.grant, decision.capability.as_deref()) {
+            if decision.verdict != Action::Deny && !grant.iter().any(|g| g == cap) {
+                decision.verdict = Action::Deny;
+                decision.rule = "r-delegation".to_string();
+                decision.gate = None;
+                decision.obligation = None;
+                decision.message = Some(format!(
+                    "capability {cap} is outside this sub-agent's delegated grant. Run the step under a parent that holds {cap}, or add {cap} to the skill scope and re-delegate."
+                ));
+            }
+        }
         let verdict = decision.verdict;
         let obligation = decision.obligation.clone();
         let message = decision.message.clone();

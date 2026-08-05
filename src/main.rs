@@ -48,6 +48,7 @@ const USAGE: &str = "usage:
   gantry score <ledger-dir> [scoring.json] [console.html]
   gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
   gantry skill delegate <parent-caps-csv> <package-dir>
+  gantry skill run <ledger-dir> <package-dir> <parent-caps-csv>
   gantry skill sign <package-dir> <seed-hex>";
 
 fn main() {
@@ -278,6 +279,9 @@ fn run() -> Result<i32, Fault> {
             skill_resolve(ledger_dir, package_dir, &[key.to_string()])
         }
         ["skill", "delegate", parent_caps, package_dir] => skill_delegate(parent_caps, package_dir),
+        ["skill", "run", ledger_dir, package_dir, parent_caps] => {
+            skill_run(ledger_dir, package_dir, parent_caps)
+        }
         ["skill", "sign", package_dir, seed_hex] => skill_sign(package_dir, seed_hex),
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
@@ -638,6 +642,83 @@ fn skill_resolve(ledger_dir: &str, package_dir: &str, extra_keys: &[String]) -> 
             Ok(1)
         }
     }
+}
+
+/// Resolve a skill, delegate a narrowed grant from the parent's, then
+/// execute each step through the broker chokepoint as a sub-agent run. A
+/// broken package refuses before anything executes; a step needing a
+/// capability outside the grant is denied at the chokepoint with rule
+/// r-delegation, and every request, decision and result is on the ledger.
+fn skill_run(ledger_dir: &str, package_dir: &str, parent_caps: &str) -> Result<i32, Fault> {
+    let pkg = Path::new(package_dir);
+    let manifest = SkillManifest::load(&pkg.join("skill.json"))?;
+    let registry_path = Path::new("config/skill-keys.json");
+    let registry: Vec<String> = if registry_path.exists() {
+        gantry::skills::KeyRegistry::load(registry_path)?.key_hexes()
+    } else {
+        Vec::new()
+    };
+    let dir = Path::new(ledger_dir);
+    let mut ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let resolved = match manifest.resolve(pkg, &registry) {
+        Ok(r) => {
+            append_system_event(&mut ledger, "system:resolver", "skill.resolve", r.subject())?;
+            r
+        }
+        Err(fault) => {
+            append_system_event(
+                &mut ledger,
+                "system:resolver",
+                "skill.resolve",
+                json!({
+                    "id": manifest.id,
+                    "version": manifest.version,
+                    "verdict": "rejected",
+                    "reason": fault.to_string(),
+                }),
+            )?;
+            eprintln!("{fault}");
+            println!("rejection recorded; nothing executed");
+            return Ok(1);
+        }
+    };
+    let parent: Vec<String> = parent_caps
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    let granted = gantry::skills::delegate(&parent, &resolved.scope)?;
+    drop(ledger);
+
+    let mut run = open_broker(ledger_dir, &format!("skill:{}", resolved.id))?;
+    run.delegate_scope(&resolved.id, &resolved.version, &granted)?;
+    let mut failures = 0u32;
+    for step in &resolved.steps {
+        let step_path = pkg.join("steps").join(format!("{step}.md"));
+        match run.call("Read", &step_path.display().to_string()) {
+            Ok(result) => println!("step {step}: {} bytes read under the grant", result.content.len()),
+            Err(fault) => {
+                eprintln!("step {step}: {fault}");
+                failures += 1;
+            }
+        }
+    }
+    let sealed = run.seal(if failures == 0 { "complete" } else { "failed" })?;
+    println!(
+        "skill {} v{} ran {} step(s), {} refused, grant {:?} (ledger sealed at size {})",
+        resolved.id,
+        resolved.version,
+        resolved.steps.len(),
+        failures,
+        granted,
+        sealed.size
+    );
+    Ok(if failures == 0 { 0 } else { 1 })
 }
 
 /// Sign a package's skill.json in place with the given ed25519 seed and print

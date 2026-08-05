@@ -129,6 +129,8 @@ Defined here because a stranger cannot verify what is not written down
 | `retention.expire` | 11 · 12 | The `subject_hash` expired, the retention rule that authorised it, and the actor. An expiry is an act under someone's authority and must be an event (finding 5). |
 | `tool.register` | 04 | Tool id, schema version, schema hash, registry verdict. A rejected registration is recorded with the reason (finding 5). |
 | `skill.resolve` | 09 | Skill id, version, verdict (`resolved`, `rejected`), signature state (`verified:<key>`, `unsigned`), resolved steps and scope. Added in slice 09: a rejected resolution carries the reason, so a broken skill's refusal is on the record, not just its absence. |
+| `subagent.spawn` | 08 | Skill id, version, and the granted capability set a delegated run holds. From this event on, a call in the run whose capability is outside the grant is denied at the chokepoint with rule `r-delegation`. Added in the post-nine gap work. |
+| `graph.query` | 03 | The graph queried, the symbol, the hits, `bytes_read` (index plus any staleness re-reads), `index_bytes`, and the stale nodes re-read. Added in the post-nine gap work so context management scores from telemetry. |
 
 ## Concurrency
 

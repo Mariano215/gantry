@@ -200,6 +200,17 @@ Total, ordered, and side-effect free. It is a pure function of the policy
 document, the call, and the identity, which is what makes a decision replayable
 by a third party holding only an exported ledger and this document.
 
+Two refinements applied at the broker, both replayable from the ledger:
+
+- The rung that indexes GATE is the earned rung, replayed from the ledger's
+  `capability.run` and `rung.change` events starting at the declared rung. A
+  gate that would land on `post` for a capability with no rollback handle
+  degrades to `pre` instead, keeping post-implies-rollback true at runtime.
+- In a delegated run (after a `subagent.spawn` event), a call whose matched
+  capability is outside the granted set is denied with the synthesized rule
+  id `r-delegation`. Like `r-default`, it is not written in the rules list;
+  it names the mechanism so the denial stays explicable.
+
 ## Decision object
 
 The output maps one to one onto the `subject` of a `policy.decision` event.
