@@ -1,0 +1,23 @@
+[
+  {
+    "name": "openai",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-5-mini",
+    "key_env": "OPENAI_API_KEY",
+    "window_budget": 128000,
+    "cost_in_per_mtok": 0.25,
+    "cost_out_per_mtok": 2.0
+  },
+  {
+    "name": "gpu-box",
+    "base_url": "http://100.120.203.53:11434/v1",
+    "model": "gemma4-8b-32k",
+    "window_budget": 32768
+  },
+  {
+    "name": "local",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "model": "qwen3:0.6b",
+    "window_budget": 32768
+  }
+]

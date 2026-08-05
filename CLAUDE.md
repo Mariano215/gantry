@@ -21,7 +21,9 @@ work item, and `gantry scan` on this repo is expected to report it.
 
 - **One chokepoint.** Every model call and every tool call passes the gateway
   or the broker. A code path that reaches a provider SDK directly is a bug,
-  because it is a hole in primitive 11. — enforced by `ci/no-direct-sdk`
+  because it is a hole in primitive 11. — enforced by `tests/invariants.rs`
+  (build failure if the HTTP client is referenced outside `src/gateway.rs`);
+  `ci/no-direct-sdk` is the CI form of the same check once CI exists
 - **The ledger is append-only.** No code mutates or deletes a ledger entry.
   Retention is expiry of the payload under a retained hash, never a rewrite.
   — enforced by `ci/ledger-append-only`
@@ -38,7 +40,10 @@ work item, and `gantry scan` on this repo is expected to report it.
   tracked in version control. Observed divergence in slice 00: the session ran
   under `bypassPermissions` while `.claude/settings.json` declared allow, ask
   and deny lists, and nothing reported it. See `docs/proof/00.md` finding (a).
-  — `[UNENFORCED]` `ci/permission-mode-drift`
+  Partially mechanised in slice 02: settings-file drift against HEAD is
+  computed per run and recorded in `authority.diverged` on every event
+  (`docs/proof/02.md` attack 5). The permission mode itself is still
+  unobserved. — `[UNENFORCED]` `ci/permission-mode-drift`
 - **A denial names its rule.** Every denied call resolves to a rule id in
   `docs/POLICY-SCHEMA.md`, so a denial short-circuited by the host permission
   list is still explicable afterwards. — `[UNENFORCED]` `ci/policy-host-parity`

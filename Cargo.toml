@@ -19,3 +19,6 @@ ed25519-dalek = "2"
 getrandom = "0.2"
 # hex: hash and key encoding in the envelope's sha256:... fields.
 hex = "0.4"
+# ureq: blocking HTTP for the gateway adapter, rustls TLS. The gateway is the
+# one component allowed to reach a provider; see docs/DEPENDENCIES.md.
+ureq = { version = "2", features = ["json"] }
