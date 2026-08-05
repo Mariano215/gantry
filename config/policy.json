@@ -3,14 +3,14 @@
   "profile": "laptop",
   "profile_requirements": {
     "isolation": {
-      "declared": "none",
-      "observed_by": "none",
-      "scores": 2
+      "declared": "seatbelt",
+      "observed_by": "sandbox.active_backend",
+      "scores": 3
     },
     "egress": {
       "declared": "allowlist",
       "allow": [],
-      "observed_by": "none"
+      "observed_by": "sandbox.egress_allow"
     },
     "identity": {
       "declared": "local",
@@ -61,7 +61,7 @@
       "tools": ["Bash(curl:*)", "Bash(wget:*)", "WebFetch(**)"],
       "effect": "irreversible",
       "rung": "led",
-      "credentials": []
+      "credentials": ["api-token"]
     },
     {
       "id": "shell.exec",

@@ -5,6 +5,8 @@ pub mod ledger;
 pub mod merkle;
 pub mod policy;
 pub mod runlog;
+pub mod sandbox;
+pub mod secrets;
 
 use std::fmt;
 
