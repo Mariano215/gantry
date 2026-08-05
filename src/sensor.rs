@@ -216,10 +216,7 @@ impl SensorRun {
         let instruction_pack = authority["instruction_version"].clone();
         let settings_hash = authority["settings_hash"].clone();
         let core = RunCore::open(ledger, actor, authority);
-        let sandbox = Sandbox::per_run(
-            &std::env::temp_dir().join(format!("gantry-sensor-run-{}", core.run_id())),
-            &[],
-        )?;
+        let sandbox = Sandbox::per_run(&crate::sandbox::unique_run_dir("gantry-sensor-run"), &[])?;
         let mut run = SensorRun {
             core,
             sandbox,

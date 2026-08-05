@@ -120,6 +120,7 @@ Defined here because a stranger cannot verify what is not written down
 | `policy.decision` | 12 | Verdict (allow, deny, hold), the rule that fired, policy version, and the request it applied to. A deny is never inferred from an absent allow; it is an event. |
 | `sensor.verdict` | 10 | Sensor id, kind (computational, inferential), lifecycle placement, pass or fail, whether it blocked, and the fix-naming message. |
 | `approval` | 07 · 12 | Approver identity and source, **verdict (`approve`, `deny`)**, what was decided, the policy that required it, elapsed time to decision. A human refusing is an approval with `verdict: deny`, not an absent event (finding 5). |
+| `capability.run` | 06 · 07 | Capability, the rung in force, and the outcome (`clean`, `sensor.fail`) of one orchestrated run. Added in slice 06: this is the unit the trust budget counts, so the rung a capability holds is replayable from these plus `rung.change`. |
 | `rung.change` | 07 | Capability, from, to, trigger (earned, override, demotion), the sensor history that justified it, approver if any. |
 | `state.checkpoint` | 06 | Checkpoint id, what it covers, size, and what a resume from it restores. |
 | `drift.report` | 12 | Declared value, running value, and the named fix. Emitted on a schedule, not only on change, so silence is evidence. |
