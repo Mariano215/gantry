@@ -18,7 +18,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 use std::process;
 
@@ -864,13 +865,35 @@ fn template_validate(template_dir: &str) -> Result<Vec<std::path::PathBuf>, Faul
     Ok(files)
 }
 
-/// Copy a validated template into a new harness directory. Validation runs
-/// first, so a broken bundle is refused before a single file lands, and an
-/// existing file is never overwritten.
+/// The seed the generated actor key is written to, relative to the harness's
+/// `config/` directory, which is what a policy's `seed_file` resolves
+/// against.
+const HARNESS_SEED_FILE: &str = "actor-key.seed";
+
+/// Copy a validated template into a new harness directory and generate the
+/// actor key that harness signs under. Validation runs first, so a broken
+/// bundle is refused before a single file lands, and an existing file is
+/// never overwritten.
+///
+/// The key is generated here rather than shipped in the template because a
+/// template carrying a seed would hand every install the same signing
+/// identity, and a signature anyone can produce attributes nothing. That is
+/// also why the template itself declares no actor key: a tracked declaration
+/// would either name tracked key material or name a key the bundle does not
+/// have.
+///
+/// Every destination path, copied or generated, is checked before anything is
+/// written. A refused init therefore leaves no half-written harness, and in
+/// particular no seed for a harness that does not exist.
 fn template_init(template_dir: &str, dest_dir: &str) -> Result<i32, Fault> {
     let files = template_validate(template_dir)?;
     let src_root = Path::new(template_dir);
     let dest_root = Path::new(dest_dir);
+    let policy_dest = dest_root.join("config/policy.json");
+    let registry_dest = dest_root.join("config/actor-keys.json");
+    let seed_dest = dest_root.join("config").join(HARNESS_SEED_FILE);
+
+    let mut plan = Vec::new();
     for src in &files {
         let rel = src.strip_prefix(src_root).map_err(|_| {
             Fault::new(
@@ -878,13 +901,22 @@ fn template_init(template_dir: &str, dest_dir: &str) -> Result<i32, Fault> {
                 "report this as a bug; validate only returns paths under the template",
             )
         })?;
-        let dest = dest_root.join(rel);
+        plan.push((src.clone(), dest_root.join(rel)));
+    }
+    for dest in plan
+        .iter()
+        .map(|(_, dest)| dest)
+        .chain([&registry_dest, &seed_dest])
+    {
         if dest.exists() {
             return Err(Fault::new(
                 format!("{} already exists", dest.display()),
                 "init refuses to overwrite; move the existing file away or choose an empty destination",
             ));
         }
+    }
+
+    for (src, dest) in &plan {
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 Fault::new(
@@ -893,7 +925,7 @@ fn template_init(template_dir: &str, dest_dir: &str) -> Result<i32, Fault> {
                 )
             })?;
         }
-        fs::copy(src, &dest).map_err(|e| {
+        fs::copy(src, dest).map_err(|e| {
             Fault::new(
                 format!("cannot copy {} to {}: {e}", src.display(), dest.display()),
                 "check the destination is writable",
@@ -901,8 +933,125 @@ fn template_init(template_dir: &str, dest_dir: &str) -> Result<i32, Fault> {
         })?;
         println!("wrote {}", dest.display());
     }
-    println!("harness initialised at {dest_dir} from template {template_dir}");
+
+    let key_id = generate_actor_key(dest_dir, &policy_dest, &registry_dest, &seed_dest)?;
+    println!("wrote {}", registry_dest.display());
+    println!("wrote {} (mode 0600)", seed_dest.display());
+    println!("harness initialised at {dest_dir} from template {template_dir}, signing as {key_id}");
     Ok(0)
+}
+
+/// Generate this harness's own ed25519 actor key: a fresh seed beside the
+/// policy, the public half registered in the harness's actor key registry,
+/// and the policy declaring the key id that seed must produce. Returns the
+/// key id.
+///
+/// The write order is deliberate. The policy and the registry name a key; the
+/// seed is the key. Writing the seed last means any earlier failure leaves a
+/// harness that refuses to run (a declared key whose seed cannot be read)
+/// rather than a live private key sitting in a directory nobody finished
+/// building.
+fn generate_actor_key(
+    dest_dir: &str,
+    policy_dest: &Path,
+    registry_dest: &Path,
+    seed_dest: &Path,
+) -> Result<String, Fault> {
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).map_err(|e| {
+        Fault::new(
+            format!("no OS entropy for actor key generation: {e}"),
+            "run init on a host with a working random device",
+        )
+    })?;
+    let verifying = ed25519_dalek::SigningKey::from_bytes(&seed).verifying_key();
+    let key_id = gantry::skills::key_id_for(&verifying);
+
+    let text = fs::read_to_string(policy_dest).map_err(|e| {
+        Fault::new(
+            format!("cannot read {}: {e}", policy_dest.display()),
+            "check the destination is readable; init wrote this file a moment ago",
+        )
+    })?;
+    let mut doc: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+        Fault::new(
+            format!("{} does not parse as JSON: {e}", policy_dest.display()),
+            "report this as a bug; the template policy validated before it was copied",
+        )
+    })?;
+    let requirements = doc
+        .get_mut("profile_requirements")
+        .and_then(serde_json::Value::as_object_mut)
+        .ok_or_else(|| {
+            Fault::new(
+                format!(
+                    "{} has no profile_requirements object to declare an actor key in",
+                    policy_dest.display()
+                ),
+                "give the template policy a profile_requirements object; see docs/POLICY-SCHEMA.md",
+            )
+        })?;
+    requirements.insert(
+        "attestation".to_string(),
+        json!({
+            "declared": "ed25519",
+            "key_id": key_id,
+            "seed_env": "GANTRY_ACTOR_SEED",
+            "seed_file": HARNESS_SEED_FILE,
+            "observed_by": "event.attestation.key_id",
+        }),
+    );
+    write_json(policy_dest, &doc)?;
+    // The same validator the running system uses, on the document init just
+    // rewrote: a harness whose policy no longer loads is a broken install,
+    // and this refuses before the seed exists.
+    Policy::load(policy_dest)?;
+
+    let registry = gantry::skills::KeyRegistry {
+        keys: vec![gantry::skills::RegisteredKey {
+            owner: format!(
+                "agent:gantry-harness at {dest_dir} (key generated by gantry template init; the seed is held at config/{HARNESS_SEED_FILE} in that harness and is not published)"
+            ),
+            public_key_hex: hex::encode(verifying.as_bytes()),
+            seed_published: false,
+        }],
+    };
+    write_json(registry_dest, &registry)?;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(seed_dest)
+        .map_err(|e| {
+            Fault::new(
+                format!("cannot create {}: {e}", seed_dest.display()),
+                "check the destination is writable and the seed does not already exist; init never overwrites key material",
+            )
+        })?;
+    file.write_all(hex::encode(seed).as_bytes()).map_err(|e| {
+        Fault::new(
+            format!("cannot write {}: {e}", seed_dest.display()),
+            "check the destination is writable; the harness cannot sign without its seed",
+        )
+    })?;
+    Ok(key_id)
+}
+
+/// Write a value as pretty JSON with a trailing newline.
+fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), Fault> {
+    let json = serde_json::to_string_pretty(value).map_err(|e| {
+        Fault::new(
+            format!("cannot serialise {}: {e}", path.display()),
+            "report this as a bug; the value is serialisable by construction",
+        )
+    })?;
+    fs::write(path, json + "\n").map_err(|e| {
+        Fault::new(
+            format!("cannot write {}: {e}", path.display()),
+            "check the destination is writable",
+        )
+    })
 }
 
 /// Sign a package's skill.json in place with the given ed25519 seed and print

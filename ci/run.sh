@@ -21,6 +21,29 @@ cargo run --quiet -- policy check config/policy.json .claude/settings.json
 echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
+echo "== template init generates a per-install actor key and the harness it produces signs (ci/template-init-signs) =="
+cargo build --quiet
+gantry_bin="$PWD/target/debug/gantry"
+init_root=$(mktemp -d)
+cargo run --quiet -- template init templates/laptop "$init_root/harness" >/dev/null
+init_verify=$(cd "$init_root/harness" && "$gantry_bin" broker call .ledger Read instructions/pack.md >/dev/null && "$gantry_bin" ledger verify .ledger) || true
+rm -rf "$init_root"
+case "$init_verify" in
+  *"attestations verified against config/actor-keys.json"*)
+    ;;
+  *)
+    echo "the harness template init produced does not sign: $init_verify. Fix: gantry template init must generate an actor key, register it in config/actor-keys.json and declare it in profile_requirements.attestation; see generate_actor_key in src/main.rs"
+    exit 1
+    ;;
+esac
+case "$init_verify" in
+  *"seed is published"*)
+    echo "the generated harness signs under a published seed, so its attestations attribute nothing: $init_verify. Fix: init must generate a fresh seed per install and register it without seed_published, never ship the repository fixture key in templates/"
+    exit 1
+    ;;
+esac
+echo "the generated harness signs under a key only it holds: ${init_verify//$'\n'/; }"
+
 echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects its negative control =="
 cargo run --quiet -- sensor live templates/laptop/config/sensors/*.json docs/proof/fixtures/no-private-key.json
 
