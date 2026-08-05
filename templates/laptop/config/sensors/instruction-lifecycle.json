@@ -1,0 +1,9 @@
+{
+  "id": "instruction-lifecycle",
+  "kind": "computational",
+  "placement": "pre_integration",
+  "blocking": true,
+  "check": "grep -q \"$(shasum -a 256 {target} | cut -d' ' -f1)\" config/instruction-reviews.jsonl",
+  "fix": "instructions/pack.md changed without a matching review record. Review the new content, then append a line to config/instruction-reviews.jsonl with its current hash (shasum -a 256 instructions/pack.md), a reviewer, and a date.",
+  "negative_control": "unreviewed placeholder content, never recorded in config/instruction-reviews.jsonl, so its hash can never be found there"
+}
