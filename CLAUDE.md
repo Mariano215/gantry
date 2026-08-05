@@ -190,6 +190,23 @@ work item, and `gantry scan` on this repo is expected to report it.
   it does not sign, if it signs under a published seed, or if its ledger does
   not verify clean
 
+- **The console renders the API, and that is checked by rendering it.** The
+  operator console's six views are asserted against values taken off a fixture
+  ledger at check time rather than against API shapes alone, so a field
+  renamed in `src/console.rs` fails the gate instead of showing a blank cell.
+  The check builds an eleven-event ledger, serves it with the binary and
+  renders every view in headless Chrome with `--dump-dom`, under flags that
+  leave only loopback resolvable; with no browser present it names the fix and
+  exits non-zero rather than skipping, because a render check that passes when
+  nothing rendered is a dead sensor reporting green. A verified signature
+  under a published seed renders as `verified (fixture)` and not as plain
+  `verified`: `docs/CONSOLE-API.md` requires the qualifier, and until the
+  render check existed the API returned `_attestation_trust` and nothing read
+  it, so a laptop run and an HSM-backed deployment rendered identically. —
+  enforced by `ci/console-render.sh`, run by `ci/run.sh` on every push; proved
+  able to fail by renaming `fired`, `earned_rung`, `_attestation_state` and
+  `_attestation_trust` in turn, and recorded in `docs/proof/11.md`
+
 ## Code standards
 
 - Rust for the control plane. One static binary. The UI is static assets that

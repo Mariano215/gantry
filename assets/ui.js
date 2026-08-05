@@ -108,13 +108,30 @@ export function attState(ev) {
   return ATT[s] ? s : 'unverified';
 }
 
+// A verified signature is worth what its key is worth. `_attestation_trust`
+// reads `fixture` when the signing seed is published, as the tracked laptop
+// key's is: the signature is real and proves which run wrote the event, but
+// anyone holding the repository can produce one, so it is not attribution.
+// Rendering that identically to an HSM-backed signature is the exact lie the
+// ledger exists to rule out, so the qualifier changes the glyph and the
+// label, not only the tooltip.
+const ATT_FIXTURE = {
+  glyph: '≈',
+  label: 'verified (fixture)',
+  title: 'signature checked and good, under a key whose seed is published; it proves which run wrote this event, not who operated it',
+};
+
 export function attMark(ev) {
   const s = attState(ev);
-  const d = ATT[s];
+  const fixture = s === 'verified' && ev && ev._attestation_trust === 'fixture';
+  const d = fixture ? ATT_FIXTURE : ATT[s];
   const raw = ev && ev._attestation_state;
   return el(
     'span',
-    { class: `att att-${s}`, title: raw === s ? d.title : `unknown attestation state ${JSON.stringify(raw)}, treated as unverified` },
+    {
+      class: `att att-${s}${fixture ? ' att-fixture' : ''}`,
+      title: raw === s ? d.title : `unknown attestation state ${JSON.stringify(raw)}, treated as unverified`,
+    },
     el('span', { class: 'att-glyph' }, d.glyph),
     d.label,
   );

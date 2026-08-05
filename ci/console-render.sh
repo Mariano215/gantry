@@ -214,6 +214,13 @@ expect overview "policy.decision" "the kind breakdown counts events off /api/eve
 expect ledger "$RUN" "each row links to the run its event carries"
 expect ledger "$RULE" "the subject summary names the rule the denial resolved to, so _subject reached the row"
 expect ledger "att-verified" "the four attestation states render distinctly, and this ledger is signed"
+# This fixture ledger is signed under the tracked laptop key, whose seed is
+# published, so /api/events returns _attestation_trust of "fixture" on every
+# row. The console has to qualify the badge with it. A laptop run and an
+# HSM-backed deployment rendering identically is the exact claim the ledger
+# exists to rule out, and until this line existed the field was returned by
+# the API and read by nothing.
+expect ledger "verified (fixture)" "a verified signature under a published seed is qualified on screen, so _attestation_trust reached the row"
 
 # Run: /api/runs.
 expect run "$RUN" "the run list is built from run.open and run.seal"

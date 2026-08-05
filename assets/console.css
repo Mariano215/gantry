@@ -474,6 +474,9 @@ td.trunc, .trunc {
   font-weight: 700;
 }
 .att-verified { color: var(--fg-dim); }
+/* A verified signature under a published seed. Marked, because it is not
+   attribution, and not marked as a failure, because the signature is real. */
+.att-fixture { color: var(--unattested); }
 .att-absent { color: var(--unattested); }
 .att-unverified { color: var(--unattested); font-weight: 650; }
 .att-forged { color: var(--fault); font-weight: 700; }
