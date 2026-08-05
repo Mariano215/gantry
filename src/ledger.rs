@@ -168,6 +168,13 @@ impl Ledger {
         self.leaves.len()
     }
 
+    /// The parsed envelopes in append order, positionally identical to what
+    /// `events_with_subjects` returns. A caller deriving a per-event property
+    /// (an attestation state, say) zips the two rather than re-parsing.
+    pub fn envelopes(&self) -> &[Envelope] {
+        &self.envelopes
+    }
+
     /// Every appended event as a JSON object with its subject payload inlined
     /// under `_subject`, in append order. This is what a replay over the
     /// ledger reads: the same envelopes an auditor exports, joined to the
@@ -358,6 +365,77 @@ fn io_fault(dir: &Path) -> impl Fn(std::io::Error) -> Fault + '_ {
     }
 }
 
+/// What an event's attestation is worth. Four values, derived per event and
+/// never assumed. `absent` and `verified` are different facts and a reader
+/// that renders them the same way is the failure this project exists to
+/// catch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttestationState {
+    /// Checked against a registered actor key and good.
+    Verified,
+    /// An attestation is present but no registered key matches its key id.
+    /// Counted, never passed.
+    Unverified,
+    /// An attestation under a registered key id that fails the check: the
+    /// envelope was altered after signing, or the signature was forged.
+    Forged,
+    /// No attestation on the event.
+    Absent,
+}
+
+impl AttestationState {
+    /// The wire spelling, shared by the API and any message that names it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AttestationState::Verified => "verified",
+            AttestationState::Unverified => "unverified",
+            AttestationState::Forged => "forged",
+            AttestationState::Absent => "absent",
+        }
+    }
+}
+
+/// Registered actor keys, parsed once and indexed by the key id an
+/// attestation names. A hex key that does not parse is dropped here rather
+/// than treated as a match, so an event signed under it reads as unverified
+/// and never as verified.
+pub struct ActorKeys(Vec<(String, VerifyingKey)>);
+
+impl ActorKeys {
+    pub fn parse(hex_keys: &[String]) -> ActorKeys {
+        ActorKeys(
+            hex_keys
+                .iter()
+                .filter_map(|hex_key| {
+                    crate::skills::parse_vk(hex_key).map(|vk| (crate::skills::key_id_for(&vk), vk))
+                })
+                .collect(),
+        )
+    }
+
+    /// The one place an attestation is judged. The full verifier and the
+    /// console API both call it, so they cannot disagree about whether a
+    /// signature is good.
+    pub fn state_of(&self, env: &Envelope) -> AttestationState {
+        let Some(att) = &env.attestation else {
+            return AttestationState::Absent;
+        };
+        let key_id = att["key_id"].as_str().unwrap_or("");
+        let Some((_, vk)) = self.0.iter().find(|(id, _)| id == key_id) else {
+            return AttestationState::Unverified;
+        };
+        let sig = att["value"]
+            .as_str()
+            .and_then(|v| hex::decode(v).ok())
+            .and_then(|b| b.try_into().ok())
+            .map(|b: [u8; 64]| Signature::from_bytes(&b));
+        match (&sig, env.attestation_bytes()) {
+            (Some(sig), Ok(msg)) if vk.verify(&msg, sig).is_ok() => AttestationState::Verified,
+            _ => AttestationState::Forged,
+        }
+    }
+}
+
 /// Verify one event offline: the bundle plus the ledger public key, no
 /// filesystem, no ledger.
 pub fn verify_bundle(bundle: &InclusionBundle, pub_key_hex: &str) -> Result<(), Fault> {
@@ -468,11 +546,6 @@ pub fn verify(dir: &Path) -> Result<VerifyReport, Fault> {
     verify_with_actor_keys(dir, &[])
 }
 
-/// Full verification with an actor key registry. An attestation whose key id
-/// resolves to a registered key is checked and a failure is a fault; one
-/// whose key id no registered key matches is counted unverified and the
-/// report says so, because a partial registry must not turn "unchecked" into
-/// "clean".
 /// ci/secret-in-prompt: grep every stored byte of a ledger for known secret
 /// values. `secrets` pairs a handle name with its value; the caller reads
 /// them from the same GANTRY_HANDLE_* environment the credential broker
@@ -505,6 +578,11 @@ pub fn scan_for_secrets(dir: &Path, secrets: &[(String, String)]) -> Result<Vec<
     Ok(hits)
 }
 
+/// Full verification with an actor key registry. An attestation whose key id
+/// resolves to a registered key is checked and a failure is a fault; one
+/// whose key id no registered key matches is counted unverified and the
+/// report says so, because a partial registry must not turn "unchecked" into
+/// "clean".
 pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<VerifyReport, Fault> {
     let mut report = VerifyReport::default();
     let events = fs::read_to_string(dir.join("events.jsonl")).map_err(io_fault(dir))?;
@@ -676,45 +754,32 @@ pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<Verif
     // counted unverified where none does. A registered key that fails to
     // verify is a fault, not a count: the actor either signed different
     // bytes or someone forged the attestation.
-    let registered: Vec<(String, ed25519_dalek::VerifyingKey)> = actor_keys
-        .iter()
-        .filter_map(|hex_key| {
-            crate::skills::parse_vk(hex_key).map(|vk| (crate::skills::key_id_for(&vk), vk))
-        })
-        .collect();
+    let registered = ActorKeys::parse(actor_keys);
     for (i, env) in envelopes.iter().enumerate() {
         let Some(env) = env else { continue };
-        let Some(att) = &env.attestation else {
-            continue;
-        };
-        let key_id = att["key_id"].as_str().unwrap_or("");
-        let Some((_, vk)) = registered.iter().find(|(id, _)| id == key_id) else {
-            report.attestations_unverified += 1;
-            continue;
-        };
-        let sig = att["value"]
-            .as_str()
-            .and_then(|v| hex::decode(v).ok())
-            .and_then(|b| b.try_into().ok())
-            .map(|b: [u8; 64]| ed25519_dalek::Signature::from_bytes(&b));
-        let verified = match (&sig, env.attestation_bytes()) {
-            (Some(sig), Ok(msg)) => vk.verify(&msg, sig).is_ok(),
-            _ => false,
-        };
-        if verified {
-            report.attestations_verified += 1;
-        } else {
-            report.faults.push(EntryFault {
-                index: Some(i),
-                id: Some(env.id.clone()),
-                fault: Fault::new(
-                    format!(
-                        "entry {i} (id {}) carries an attestation under registered key {key_id} that does not verify",
-                        env.id
+        match registered.state_of(env) {
+            AttestationState::Absent => {}
+            AttestationState::Unverified => report.attestations_unverified += 1,
+            AttestationState::Verified => report.attestations_verified += 1,
+            AttestationState::Forged => {
+                let key_id = env
+                    .attestation
+                    .as_ref()
+                    .and_then(|att| att["key_id"].as_str())
+                    .unwrap_or("")
+                    .to_string();
+                report.faults.push(EntryFault {
+                    index: Some(i),
+                    id: Some(env.id.clone()),
+                    fault: Fault::new(
+                        format!(
+                            "entry {i} (id {}) carries an attestation under registered key {key_id} that does not verify",
+                            env.id
+                        ),
+                        "the envelope was altered after signing, or the attestation was forged; restore the entry from a replica or revoke the key",
                     ),
-                    "the envelope was altered after signing, or the attestation was forged; restore the entry from a replica or revoke the key",
-                ),
-            });
+                });
+            }
         }
     }
 
