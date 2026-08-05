@@ -30,6 +30,7 @@ const USAGE: &str = "usage:
   gantry ledger verify-inclusion <bundle.json> <pubkey-file>
   gantry ledger consistency <dir> <m>
   gantry ledger expire <dir> <subject_hash>         (NewEvent JSON on stdin)
+  gantry ledger scan-secrets <dir>                  (values from GANTRY_HANDLE_*)
   gantry run <providers.json> <provider-name> <ledger-dir>
   gantry policy check <policy.json> [settings.json]
   gantry broker register <ledger-dir> <tool-def.json>
@@ -114,6 +115,28 @@ fn run() -> Result<i32, Fault> {
                 println!("entry {index} ({id}): {}", f.fault);
             }
             Ok(if report.ok() { 0 } else { 1 })
+        }
+        ["ledger", "scan-secrets", dir] => {
+            let secrets: Vec<(String, String)> = env::vars()
+                .filter(|(k, _)| k.starts_with("GANTRY_HANDLE_"))
+                .collect();
+            if secrets.is_empty() {
+                println!("no GANTRY_HANDLE_* values in the environment; nothing to scan for");
+                return Ok(0);
+            }
+            let hits = ledger::scan_for_secrets(Path::new(dir), &secrets)?;
+            for hit in &hits {
+                eprintln!("{hit}");
+            }
+            if hits.is_empty() {
+                println!(
+                    "no secret value found in {dir} ({} handle(s) checked)",
+                    secrets.len()
+                );
+                Ok(0)
+            } else {
+                Ok(1)
+            }
         }
         ["ledger", "prove", dir, index] => {
             let index = parse_index(index)?;

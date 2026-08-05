@@ -34,8 +34,12 @@ work item, and `gantry scan` on this repo is expected to report it.
   `src/secrets.rs`: a value reaches only the sandboxed child's environment,
   never the command string, an event or a Fault; a handle a capability does
   not declare is refused. Exercised by `tests/secrets.rs` and
-  `tests/sandbox.rs`. The remaining gap is a scanner that greps every
-  subject for a known secret value; `ci/secret-in-prompt` names it
+  `tests/sandbox.rs`. The scanner `ci/secret-in-prompt` named is
+  `gantry ledger scan-secrets` since the post-nine gap work: it greps every
+  stored byte (events, heads, payloads) for the values of the
+  GANTRY_HANDLE_* environment, names the handle and file on a hit and never
+  echoes the value. Exercised by `tests/ledger.rs`
+  (`a_secret_value_on_the_ledger_is_found_and_never_echoed`)
 - **No network in tests.** The full suite runs with an empty network
   namespace. This is what keeps the air-gap claim true. — enforced by
   `ci/offline-suite`. Partially mechanised since slice 04: the broker runs

@@ -419,3 +419,30 @@ fn reopen_continues_the_chain() {
     );
     assert_eq!(l.latest_head().unwrap().size, head_before.size + 1);
 }
+
+/// ci/secret-in-prompt: a secret value that reaches any stored byte is
+/// found, and the fault names the handle and file, never the value.
+#[test]
+fn a_secret_value_on_the_ledger_is_found_and_never_echoed() {
+    let (dir, _l) = build("scan-clean", 3);
+    let secrets = vec![("GANTRY_HANDLE_API".to_string(), "hunter2-value".to_string())];
+    assert!(ledger::scan_for_secrets(&dir, &secrets).unwrap().is_empty());
+
+    let (dir, mut l) = build("scan-hit", 1);
+    l.append(ev(
+        2,
+        "tool.request",
+        json!({"args": {"command": "curl -H 'authorization: hunter2-value'"}}),
+    ))
+    .unwrap();
+    let hits = ledger::scan_for_secrets(&dir, &secrets).unwrap();
+    assert!(!hits.is_empty(), "the leaked value must be found");
+    for hit in &hits {
+        let text = hit.to_string();
+        assert!(text.contains("GANTRY_HANDLE_API"), "{text}");
+        assert!(
+            !text.contains("hunter2-value"),
+            "the scanner must never echo the secret: {text}"
+        );
+    }
+}

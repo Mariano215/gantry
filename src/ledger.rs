@@ -473,6 +473,38 @@ pub fn verify(dir: &Path) -> Result<VerifyReport, Fault> {
 /// whose key id no registered key matches is counted unverified and the
 /// report says so, because a partial registry must not turn "unchecked" into
 /// "clean".
+/// ci/secret-in-prompt: grep every stored byte of a ledger for known secret
+/// values. `secrets` pairs a handle name with its value; the caller reads
+/// them from the same GANTRY_HANDLE_* environment the credential broker
+/// substitutes from, so the scanner and the broker agree on what a secret
+/// is. A hit names the handle and the file, never the value.
+pub fn scan_for_secrets(dir: &Path, secrets: &[(String, String)]) -> Result<Vec<Fault>, Fault> {
+    let mut hits = Vec::new();
+    let mut files: Vec<PathBuf> = vec![dir.join("events.jsonl"), dir.join("heads.jsonl")];
+    if let Ok(entries) = fs::read_dir(dir.join("payloads")) {
+        for entry in entries.flatten() {
+            files.push(entry.path());
+        }
+    }
+    for file in files {
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        for (handle, value) in secrets {
+            if !value.is_empty() && text.contains(value.as_str()) {
+                hits.push(Fault::new(
+                    format!(
+                        "the value of secret handle {handle} appears in {}",
+                        file.display()
+                    ),
+                    "a secret value must never be stored; expire the payload, rotate the credential, and find the code path that wrote the value instead of the handle",
+                ));
+            }
+        }
+    }
+    Ok(hits)
+}
+
 pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<VerifyReport, Fault> {
     let mut report = VerifyReport::default();
     let events = fs::read_to_string(dir.join("events.jsonl")).map_err(io_fault(dir))?;

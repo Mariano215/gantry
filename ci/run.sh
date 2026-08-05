@@ -9,7 +9,7 @@ set -e
 echo "== format =="
 cargo fmt --check
 
-echo "== clippy, warnings are errors (ci/message-lint relies on load-time validators) =="
+echo "== clippy, warnings are errors (carries the no-unwrap rule) =="
 cargo clippy --all-targets -- -D warnings
 
 echo "== offline suite (ci/offline-suite, ci/no-direct-sdk, ci/ledger-append-only via tests/invariants.rs and tests/ledger.rs) =="
@@ -27,7 +27,8 @@ cargo run --quiet -- sensor live templates/laptop/sensors/*.json docs/proof/fixt
 echo "== every dependency has a note in docs/DEPENDENCIES.md =="
 deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
 for dep in ${(f)deps}; do
-  if ! grep -q "$dep" docs/DEPENDENCIES.md; then
+  # Whole-word match: "sha" must not pass because "sha2" is documented.
+  if ! grep -qE "(^|[^a-zA-Z0-9_-])${dep}([^a-zA-Z0-9_-]|$)" docs/DEPENDENCIES.md; then
     echo "dependency $dep has no entry in docs/DEPENDENCIES.md. Fix: add a row naming why it is here and its network/process capability"
     exit 1
   fi
