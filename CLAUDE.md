@@ -196,6 +196,28 @@ work item, and `gantry scan` on this repo is expected to report it.
   it does not sign, if it signs under a published seed, or if its ledger does
   not verify clean
 
+- **A hold is resolved by an approval on the record, and the decision keeps
+  saying hold.** A policy hold is not a failure, it is a call waiting for a
+  human. `gantry approve` writes an `approval` naming the call hash, the rule
+  and the approver; the broker releases the retry and writes an
+  `approval.use`. The `policy.decision` still reads `hold`, because that is
+  what the policy computed, and an allow written there would say the policy
+  permitted a call it did not. A grant is single use, is bound to the call
+  hash rather than the request id (the retry is a new run with a new request
+  id), releases only a call whose rule it names, and is re-checked against
+  the trust budget at consumption, because a ledger file is writable by more
+  than the one command. An approval never reverses a denial: `gantry approve`
+  refuses any request that did not resolve to `hold`, and the broker consults
+  grants only on the hold branch. A refusal is recorded as
+  `verdict: deny`, so "nobody looked" and "somebody said no" are different
+  states. — enforced by `src/broker.rs` (`usable_grant`), `src/main.rs`
+  (`approve`) and `tests/broker.rs`
+  (`an_approval_releases_the_held_call_and_the_decision_still_says_hold`,
+  `an_approval_releases_one_call_and_not_the_next`,
+  `an_approval_does_not_release_a_different_call`,
+  `a_denied_call_cannot_be_approved`,
+  `a_grant_from_an_unpermitted_approver_does_not_release_the_call`,
+  `a_refusal_is_recorded_and_releases_nothing`)
 - **The console renders the API, and that is checked by rendering it.** The
   operator console's six views are asserted against values taken off a fixture
   ledger at check time rather than against API shapes alone, so a field

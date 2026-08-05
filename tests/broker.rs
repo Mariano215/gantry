@@ -734,3 +734,358 @@ fn a_refused_init_leaves_no_seed_and_never_clobbers_one() {
         "a second init never rewrites the first harness's key"
     );
 }
+
+// ---------- approvals for held calls ----------
+
+/// `gantry approve` against a ledger, run from the repository root so it reads
+/// the tracked config/policy.json the same way the broker does.
+fn approve_cmd(led: &Path, request_id: &str, approver: &str) -> std::process::Output {
+    approve_with(led, request_id, approver, "approve")
+}
+
+fn approve_with(
+    led: &Path,
+    request_id: &str,
+    approver: &str,
+    verdict: &str,
+) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_gantry"))
+        .arg("approve")
+        .arg(led)
+        .arg(request_id)
+        .arg(approver)
+        .arg(verdict)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap()
+}
+
+/// The request id of the first request on the ledger whose decision held.
+fn held_request_id(led: &Path) -> String {
+    let evs = events(led);
+    let mut pending = None;
+    for ev in &evs {
+        match ev["kind"].as_str() {
+            Some("tool.request") => pending = Some(subject(led, ev)),
+            Some("policy.decision") => {
+                let d = subject(led, ev);
+                if d["verdict"] == "hold" {
+                    if let Some(req) = pending.take() {
+                        return req["request_id"].as_str().unwrap().to_string();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("no held request on this ledger");
+}
+
+/// The headline: a held call is a dead end until an approval exists, and the
+/// approval releases exactly the call it names. The decision stays a hold,
+/// because a hold is what the policy computed; the release is a separate
+/// event, so the record never says the policy permitted a call it held.
+#[test]
+fn an_approval_releases_the_held_call_and_the_decision_still_says_hold() {
+    let dir = workdir("approve-releases");
+    let led = dir.join("ledger-approve");
+    let cmd = "git push origin main";
+    {
+        let mut run = BrokerRun::open(
+            Ledger::init(&led).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", cmd).unwrap_err();
+        run.seal("complete").unwrap();
+    }
+
+    let request_id = held_request_id(&led);
+    let out = approve_cmd(&led, &request_id, "user:mariano@local");
+    assert!(
+        out.status.success(),
+        "approve failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // The same call again. A new run, so a new request id: the grant has to be
+    // found by the call's own identity, not by the id the approver saw.
+    let before = events(&led).len();
+    {
+        let mut run = BrokerRun::open(
+            Ledger::open(&led).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", cmd)
+            .expect("the approval on the ledger releases this call");
+        run.seal("complete").unwrap();
+    }
+
+    let evs = events(&led);
+    let new: Vec<&Value> = evs[before..].iter().collect();
+    let decision = new
+        .iter()
+        .find(|e| e["kind"] == "policy.decision")
+        .map(|e| subject(&led, e))
+        .expect("the released call still records its decision");
+    assert_eq!(
+        decision["verdict"], "hold",
+        "the policy held this call and the decision must keep saying so"
+    );
+    let used = new
+        .iter()
+        .find(|e| e["kind"] == "approval.use")
+        .map(|e| subject(&led, e))
+        .expect("consuming an approval is itself an event");
+    assert_eq!(used["rule"], "r-publish");
+    assert_eq!(used["approver"], "user:mariano@local");
+    assert_eq!(
+        used["self_approved"], true,
+        "the caller approved their own call, and the record says so rather than hiding it"
+    );
+    let result = new
+        .iter()
+        .find(|e| e["kind"] == "tool.result")
+        .map(|e| subject(&led, e))
+        .unwrap();
+    assert_eq!(result["outcome"], "ok", "the approved call actually ran");
+    assert!(ledger::verify(&led).unwrap().ok());
+}
+
+/// Single use. The second attempt at the same call finds the grant spent and
+/// is held again, so an approval is permission for one call and not a
+/// standing licence.
+#[test]
+fn an_approval_releases_one_call_and_not_the_next() {
+    let dir = workdir("approve-single-use");
+    let led = dir.join("ledger-single");
+    let cmd = "git push origin main";
+    let call_once = |expect_ok: bool| {
+        let mut run = BrokerRun::open(
+            if led.join("events.jsonl").exists() {
+                Ledger::open(&led).unwrap()
+            } else {
+                Ledger::init(&led).unwrap()
+            },
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        let outcome = run.call("Bash", cmd);
+        run.seal("complete").unwrap();
+        assert_eq!(outcome.is_ok(), expect_ok, "{outcome:?}");
+    };
+
+    call_once(false);
+    let request_id = held_request_id(&led);
+    assert!(approve_cmd(&led, &request_id, "user:mariano@local")
+        .status
+        .success());
+    call_once(true);
+    call_once(false);
+
+    let spent = events(&led)
+        .iter()
+        .filter(|e| e["kind"] == "approval.use")
+        .count();
+    assert_eq!(spent, 1, "one grant, one use, however many attempts follow");
+}
+
+/// An approval names a call. A different call, held under the same rule by the
+/// same policy, is not released by it.
+#[test]
+fn an_approval_does_not_release_a_different_call() {
+    let dir = workdir("approve-other-call");
+    let led = dir.join("ledger-other");
+    {
+        let mut run = BrokerRun::open(
+            Ledger::init(&led).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", "git push origin main").unwrap_err();
+        run.seal("complete").unwrap();
+    }
+    let request_id = held_request_id(&led);
+    assert!(approve_cmd(&led, &request_id, "user:mariano@local")
+        .status
+        .success());
+
+    // Same rule, same capability, different target, so a different call hash.
+    let mut run = BrokerRun::open(
+        Ledger::open(&led).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    let fault = run.call("Bash", "git push origin release").unwrap_err();
+    run.seal("complete").unwrap();
+    assert!(
+        fault
+            .cause
+            .contains("no approval on this ledger releases it"),
+        "an approval for one call must not release another: {fault}"
+    );
+}
+
+/// An approval never reverses a denial. The CLI refuses to write one, which
+/// matters because a denial is the policy's answer and an approval is only
+/// ever the resolution of a hold.
+#[test]
+fn a_denied_call_cannot_be_approved() {
+    let dir = workdir("approve-denied");
+    let led = dir.join("ledger-denied");
+    let mut run = BrokerRun::open(
+        Ledger::init(&led).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    run.call("Bash", "rm -rf /").unwrap_err();
+    run.seal("complete").unwrap();
+
+    let evs = events(&led);
+    let request = evs
+        .iter()
+        .find(|e| e["kind"] == "tool.request")
+        .map(|e| subject(&led, e))
+        .unwrap();
+    let request_id = request["request_id"].as_str().unwrap();
+    let out = approve_cmd(&led, request_id, "user:mariano@local");
+    assert!(!out.status.success(), "a denial must not be approvable");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("only a held call can be approved"),
+        "the refusal names the rule: {stderr}"
+    );
+    assert!(
+        !events(&led).iter().any(|e| e["kind"] == "approval"),
+        "a refused approval writes nothing"
+    );
+}
+
+/// The consuming end re-derives permission rather than trusting that a grant
+/// exists. A ledger is a file, so a grant can be put on it by something other
+/// than `gantry approve`; here the grant is written while the profile permits
+/// any approver, and consumed under a profile that names a closed set.
+#[test]
+fn a_grant_from_an_unpermitted_approver_does_not_release_the_call() {
+    let dir = workdir("approve-unpermitted");
+    let led = dir.join("ledger-unpermitted");
+    let cmd = "git push origin main";
+    {
+        let mut run = BrokerRun::open(
+            Ledger::init(&led).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", cmd).unwrap_err();
+        run.seal("complete").unwrap();
+    }
+    let request_id = held_request_id(&led);
+    assert!(approve_cmd(&led, &request_id, "user:mariano@local")
+        .status
+        .success());
+
+    // The same ledger, now read under a policy whose approver set is closed
+    // and does not contain the approver who signed that grant.
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(repo_path("config/policy.json")).unwrap())
+            .unwrap();
+    doc["trust_budget"]["promotion"]["approver"] = json!("named");
+    doc["trust_budget"]["promotion"]["named_approvers"] = json!(["user:auditor@example.com"]);
+    let strict_path = dir.join("strict-policy.json");
+    fs::write(&strict_path, serde_json::to_string(&doc).unwrap()).unwrap();
+
+    let mut run = BrokerRun::open(
+        Ledger::open(&led).unwrap(),
+        Policy::load(&strict_path).unwrap(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    let fault = run.call("Bash", cmd).unwrap_err();
+    run.seal("complete").unwrap();
+    assert!(
+        fault.cause.contains("no approval on this ledger releases it"),
+        "a grant from an approver the trust budget does not permit must not release a call: {fault}"
+    );
+    assert!(
+        !events(&led).iter().any(|e| e["kind"] == "approval.use"),
+        "an unusable grant is never consumed"
+    );
+}
+
+/// A human who refuses is an approval with verdict deny, not an absent event.
+/// The record has to distinguish "nobody looked at this" from "somebody looked
+/// and said no", and the call stays held either way.
+#[test]
+fn a_refusal_is_recorded_and_releases_nothing() {
+    let dir = workdir("approve-refused");
+    let led = dir.join("ledger-refused");
+    let cmd = "git push origin main";
+    {
+        let mut run = BrokerRun::open(
+            Ledger::init(&led).unwrap(),
+            tracked_policy(),
+            "broker-test",
+            &pinning(&dir),
+        )
+        .unwrap();
+        run.register_builtins().unwrap();
+        run.call("Bash", cmd).unwrap_err();
+        run.seal("complete").unwrap();
+    }
+    let request_id = held_request_id(&led);
+    let out = approve_with(&led, &request_id, "user:mariano@local", "deny");
+    assert!(
+        out.status.success(),
+        "recording a refusal is an ordinary write: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let refusal = events(&led)
+        .iter()
+        .find(|e| e["kind"] == "approval")
+        .map(|e| subject(&led, e))
+        .expect("the refusal is on the ledger, not merely absent");
+    assert_eq!(refusal["verdict"], "deny");
+    assert_eq!(refusal["approver"], "user:mariano@local");
+
+    let mut run = BrokerRun::open(
+        Ledger::open(&led).unwrap(),
+        tracked_policy(),
+        "broker-test",
+        &pinning(&dir),
+    )
+    .unwrap();
+    run.register_builtins().unwrap();
+    let fault = run.call("Bash", cmd).unwrap_err();
+    run.seal("complete").unwrap();
+    assert!(
+        fault
+            .cause
+            .contains("no approval on this ledger releases it"),
+        "a recorded refusal must not read as permission: {fault}"
+    );
+}

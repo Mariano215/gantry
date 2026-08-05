@@ -41,6 +41,7 @@ const USAGE: &str = "usage:
   gantry sensor gate <ledger-dir> <sensor.json> <artifact>
   gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>
   gantry orchestrate step <ledger-dir> <capability> <sensor.json> <artifact> [approver]
+  gantry approve <ledger-dir> <request-id> <approver> [approve|deny]
   gantry trust history <ledger-dir> <capability>
   gantry durable run <ledger-dir> <task-id> <crash-after|-> <file>...
   gantry durable resume <ledger-dir> <task-id> <file>...
@@ -306,6 +307,12 @@ fn run() -> Result<i32, Fault> {
                 artifact,
                 Some(approver),
             )
+        }
+        ["approve", ledger_dir, request_id, approver] => {
+            approve(ledger_dir, request_id, approver, "approve")
+        }
+        ["approve", ledger_dir, request_id, approver, verdict @ ("approve" | "deny")] => {
+            approve(ledger_dir, request_id, approver, verdict)
         }
         ["trust", "history", ledger_dir, capability] => trust_history(ledger_dir, capability),
         ["durable", "run", ledger_dir, task_id, crash_after, files @ ..] if !files.is_empty() => {
@@ -1269,6 +1276,146 @@ fn orchestrate_step(
         outcome.rung_after.schema_name(),
         outcome.verdict
     );
+    Ok(0)
+}
+
+/// Grant an approval for a call the policy held, naming the request the
+/// approver is answering.
+///
+/// The request id is the handle because it is what the operator has in front
+/// of them: the broker's refusal prints it and the console shows it. What the
+/// grant records is the call hash, because the retry that consumes it is a
+/// different run with a different request id, and an approval that could not
+/// be found by the retry would be an approval for nothing.
+///
+/// Three refusals, and each one is a hole if it is missing. A request that
+/// was never held cannot be approved, which is what stops a grant from
+/// resurrecting a denial. An approver the trust budget does not permit cannot
+/// grant, which is what makes `regulated`'s named approvers mean something.
+/// A request id that is not on this ledger cannot be approved, which stops an
+/// approval for a call nobody made. The broker re-checks the second of these
+/// when it consumes the grant, because a ledger file is writable by anyone
+/// who can reach it and this command is not the only way to append.
+fn approve(
+    ledger_dir: &str,
+    request_id: &str,
+    approver: &str,
+    verdict: &str,
+) -> Result<i32, Fault> {
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let budget = gantry::trust::TrustBudget::from_policy(&policy);
+    if !budget.approver_ok(approver) {
+        return Err(Fault::new(
+            format!("{approver} is not permitted to approve under this policy's trust budget"),
+            "name an approver listed in trust_budget.promotion.named_approvers, or run this on a profile whose approver is any",
+        ));
+    }
+    let dir = Path::new(ledger_dir);
+    let ledger = Ledger::open(dir)?;
+    let events = ledger.events_with_subjects()?;
+
+    // Pair each decision with the request it answers. The broker appends
+    // tool.request and then exactly one policy.decision, so the pairing is
+    // the emission order rather than a join key that could go stale.
+    let mut pending: Option<(&str, &str)> = None;
+    let mut found: Option<(String, String)> = None;
+    for ev in &events {
+        let subj = &ev["_subject"];
+        match ev["kind"].as_str() {
+            Some("tool.request") => {
+                pending = match (subj["request_id"].as_str(), subj["call_hash"].as_str()) {
+                    (Some(id), Some(hash)) => Some((id, hash)),
+                    _ => None,
+                };
+            }
+            Some("policy.decision") => {
+                if let Some((id, hash)) = pending.take() {
+                    if id == request_id {
+                        found = Some((
+                            hash.to_string(),
+                            subj["verdict"].as_str().unwrap_or_default().to_string(),
+                        ));
+                        if subj["verdict"] == json!("hold") {
+                            let rule = subj["rule"].as_str().unwrap_or_default().to_string();
+                            return write_grant(
+                                ledger, &policy, request_id, hash, &rule, approver, verdict,
+                            );
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    match found {
+        Some((_, verdict)) => Err(Fault::new(
+            format!("request {request_id} resolved to {verdict}, and only a held call can be approved"),
+            "an approval releases a call the policy held pre-execution; it never reverses a denial. Change the policy rule if the call should be permitted at all.",
+        )),
+        None => Err(Fault::new(
+            format!("no request {request_id} on the ledger at {ledger_dir}"),
+            "take the request id from the broker's refusal or from the console's ledger view; an approval names a call that was actually made",
+        )),
+    }
+}
+
+fn write_grant(
+    ledger: Ledger,
+    policy: &Policy,
+    request_id: &str,
+    call_hash: &str,
+    rule: &str,
+    approver: &str,
+    verdict: &str,
+) -> Result<i32, Fault> {
+    let settings_path = Path::new(".claude/settings.json");
+    let pin = Pinning {
+        policy: "config/policy.json".into(),
+        instructions: Path::new("instructions/pack.md").into(),
+        settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+        diverged: settings_divergence(settings_path),
+    };
+    let policy_version = policy.policy_version.clone().ok_or_else(|| {
+        Fault::new(
+            "policy has no computed version",
+            "load the policy with Policy::load, which computes policy_version",
+        )
+    })?;
+    let authority = pin.authority(&policy.profile, &policy_version)?;
+    let actor = json!({
+        "type": "human",
+        "id": approver,
+        "identity_source": "local",
+        "rung": null,
+    });
+    let signer = gantry::runlog::ActorSigner::declared(
+        &policy.profile,
+        &policy.profile_requirements,
+        gantry::gateway::policy_dir(&pin.policy),
+    )?;
+    let mut core = gantry::runlog::RunCore::open(ledger, actor, authority).signed_by(signer);
+    let grant_id = format!("{}-{}", core.run_id(), core.event_count());
+    core.append(
+        "approval",
+        json!({
+            "grant_id": grant_id,
+            "verdict": verdict,
+            "call_hash": call_hash,
+            "rule": rule,
+            "approver": approver,
+            "approver_source": "local",
+            "request_id": request_id,
+        }),
+    )?;
+    core.seal(json!({}), "complete")?;
+    println!("approval {grant_id}: {approver} recorded {verdict} for rule {rule} on request {request_id}");
+    if verdict == "approve" {
+        println!(
+            "it releases one call whose hash is {call_hash}; make the same call again to use it"
+        );
+    } else {
+        println!("the refusal is on the ledger; the call stays held and nothing releases it");
+    }
     Ok(0)
 }
 

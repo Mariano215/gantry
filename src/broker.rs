@@ -297,9 +297,56 @@ impl BrokerRun {
         }
     }
 
+    /// The stable identity of a call, so an approval issued against one
+    /// invocation can be found by the retry that follows it. A `request_id`
+    /// cannot serve: it carries the run id and the sequence number, and every
+    /// `gantry broker call` opens a new run, so the retry of a held call
+    /// never carries the id the approver saw. The tool and its arguments do
+    /// not move, so their canonical hash is what a grant names.
+    pub fn call_hash(tool: &str, args: &Value) -> Result<String, Fault> {
+        subject_hash(&json!({ "tool": tool, "args": args }))
+    }
+
+    /// The grant that can release this held call, if the ledger holds one.
+    ///
+    /// Every check here is repeated from `gantry approve`, deliberately. That
+    /// command refuses to write a grant it should not, but a ledger is a file
+    /// and an append-only log is not an access-controlled one: anyone able to
+    /// write the file can put an `approval.grant` on it. So the consuming end
+    /// is the load-bearing one, and it re-derives permission rather than
+    /// trusting that the event exists.
+    ///
+    /// Single use. A grant is spent by the `approval.use` that names it, so a
+    /// replayed or copied grant releases one call and never a second.
+    fn usable_grant(&self, history: &[Value], call_hash: &str, rule: &str) -> Option<Value> {
+        let spent: Vec<&Value> = history
+            .iter()
+            .filter(|e| e["kind"] == json!("approval.use"))
+            .map(|e| &e["_subject"]["grant_id"])
+            .collect();
+        let budget = crate::trust::TrustBudget::from_policy(&self.policy);
+        history
+            .iter()
+            .filter(|e| e["kind"] == json!("approval"))
+            .map(|e| e["_subject"].clone())
+            .find(|g| {
+                g["call_hash"] == json!(call_hash)
+                    && g["rule"] == json!(rule)
+                    // An approval carries a verdict, because a human refusing
+                    // is an event and not an absent one. Only an approve
+                    // releases anything; a deny sits on the record as the
+                    // answer that was given.
+                    && g["verdict"] == json!("approve")
+                    && g["approver"]
+                        .as_str()
+                        .is_some_and(|a| budget.approver_ok(a))
+                    && !spent.iter().any(|id| *id == &g["grant_id"])
+            })
+    }
+
     /// The chokepoint. Emits `tool.request`, evaluates the policy to exactly
-    /// one `policy.decision`, executes only on allow, and emits
-    /// `tool.result` in every case.
+    /// one `policy.decision`, executes only on allow or on a held call whose
+    /// approval is on the ledger, and emits `tool.result` in every case.
     pub fn call(&mut self, tool: &str, target: &str) -> Result<BrokerResult, Fault> {
         let schema_version = self.registered.get(tool).cloned().ok_or_else(|| {
             Fault::new(
@@ -321,10 +368,12 @@ impl BrokerRun {
         // the ledger; substitution happens after the allow, inside the
         // sandbox's environment.
         let credential_handles = CredentialBroker::handles_in(target);
+        let call_hash = BrokerRun::call_hash(tool, &args)?;
         self.core.append(
             "tool.request",
             json!({
                 "request_id": request_id,
+                "call_hash": call_hash,
                 "tool": tool,
                 "schema_version": schema_version,
                 "args": args,
@@ -379,83 +428,137 @@ impl BrokerRun {
                 ))
             }
             Action::Hold => {
-                // No approval loop exists until slice 06, so a hold cannot yet
-                // resolve; the call is blocked and the obligation is recorded.
-                self.emit_result(&request_id, "blocked", None, false, 0, message.as_deref())?;
-                Err(Fault::new(
-                    format!(
-                        "policy held {tool} on {target}: rule {rule} gates this call pre and no approval mechanism exists until slice 06"
-                    ),
-                    message.unwrap_or_else(|| "obtain an approval event, or lower the call's ambition".into()),
-                ))
-            }
-            Action::Allow => {
-                if obligation.as_deref() == Some("review") {
-                    self.outstanding_reviews += 1;
-                }
-                // Credential substitution happens here and nowhere earlier:
-                // after the policy allowed the call, at the tool boundary,
-                // scoped to the capability's declared handles.
-                let granted = decision
-                    .capability
-                    .as_deref()
-                    .and_then(|id| self.policy.capabilities.iter().find(|c| c.id == id))
-                    .map(|c| c.credentials.clone())
-                    .unwrap_or_default();
-                let substitution = match self.credentials.substitute(target, &granted) {
-                    Ok(s) => s,
-                    Err(fault) => {
-                        self.emit_result(
-                            &request_id,
-                            "denied",
-                            None,
-                            false,
-                            0,
-                            Some(&fault.to_string()),
-                        )?;
-                        return Err(Fault::new(
-                            format!(
-                                "credential broker refused {tool} and the refusal is on the ledger: {}",
-                                fault.cause
-                            ),
-                            fault.fix,
-                        ));
-                    }
-                };
-                let started = std::time::Instant::now();
-                let outcome = self.execute(tool, target, &substitution);
-                let duration_ms = started.elapsed().as_millis() as u64;
-                match outcome {
-                    Ok(result) => {
-                        let result_hash = subject_hash(&result.payload)?;
-                        self.emit_result(
-                            &request_id,
-                            "ok",
-                            Some(&result_hash),
-                            true,
-                            duration_ms,
-                            None,
-                        )?;
-                        Ok(BrokerResult {
-                            content: result.content,
-                            taint: true,
-                        })
-                    }
-                    Err(fault) => {
+                // The decision above stays a hold, because a hold is what the
+                // policy computed and the decision event is the record of
+                // that. What follows is a separate fact: an approval already
+                // on the ledger satisfied the obligation. Recording it as an
+                // allow instead would make the policy appear to have
+                // permitted a call it held.
+                match self.usable_grant(&history, &call_hash, &rule) {
+                    None => {
                         self.emit_result(
                             &request_id,
                             "blocked",
                             None,
                             false,
-                            duration_ms,
-                            Some(&fault.to_string()),
+                            0,
+                            message.as_deref(),
                         )?;
                         Err(Fault::new(
-                            format!("{tool} on {target} could not execute and the failure is on the ledger: {}", fault.cause),
-                            fault.fix,
+                            format!(
+                                "policy held {tool} on {target}: rule {rule} gates this call pre and no approval on this ledger releases it"
+                            ),
+                            message.unwrap_or_else(|| format!(
+                                "have a permitted approver run: gantry approve <ledger-dir> {request_id} <approver>, then make the same call again; or lower the call's ambition to a capability with a lower gate"
+                            )),
                         ))
                     }
+                    Some(grant) => {
+                        let approver = grant["approver"].as_str().unwrap_or_default().to_string();
+                        self.core.append(
+                            "approval.use",
+                            json!({
+                                "grant_id": grant["grant_id"],
+                                "call_hash": call_hash,
+                                "request_id": request_id,
+                                "rule": rule,
+                                "approver": approver,
+                                // An approver who is also the caller is
+                                // permitted when the profile says approver is
+                                // "any", and recorded either way. The reader
+                                // decides what a self-approval is worth; the
+                                // record never hides that it was one.
+                                "self_approved": self.identity["id"] == json!(approver),
+                            }),
+                        )?;
+                        self.execute_allowed(&decision, &request_id, tool, target)
+                    }
                 }
+            }
+            Action::Allow => {
+                if obligation.as_deref() == Some("review") {
+                    self.outstanding_reviews += 1;
+                }
+                self.execute_allowed(&decision, &request_id, tool, target)
+            }
+        }
+    }
+
+    /// Everything after the call is cleared to run: credential substitution
+    /// at the tool boundary, execution, and the result event. Shared by an
+    /// allow and by a hold an approval released, so an approved call runs the
+    /// identical path rather than a second one that could drift from it.
+    fn execute_allowed(
+        &mut self,
+        decision: &crate::policy::Decision,
+        request_id: &str,
+        tool: &str,
+        target: &str,
+    ) -> Result<BrokerResult, Fault> {
+        // Credential substitution happens here and nowhere earlier: after the
+        // call is cleared, at the tool boundary, scoped to the capability's
+        // declared handles.
+        let granted = decision
+            .capability
+            .as_deref()
+            .and_then(|id| self.policy.capabilities.iter().find(|c| c.id == id))
+            .map(|c| c.credentials.clone())
+            .unwrap_or_default();
+        let substitution = match self.credentials.substitute(target, &granted) {
+            Ok(s) => s,
+            Err(fault) => {
+                self.emit_result(
+                    request_id,
+                    "denied",
+                    None,
+                    false,
+                    0,
+                    Some(&fault.to_string()),
+                )?;
+                return Err(Fault::new(
+                    format!(
+                        "credential broker refused {tool} and the refusal is on the ledger: {}",
+                        fault.cause
+                    ),
+                    fault.fix,
+                ));
+            }
+        };
+        let started = std::time::Instant::now();
+        let outcome = self.execute(tool, target, &substitution);
+        let duration_ms = started.elapsed().as_millis() as u64;
+        match outcome {
+            Ok(result) => {
+                let result_hash = subject_hash(&result.payload)?;
+                self.emit_result(
+                    request_id,
+                    "ok",
+                    Some(&result_hash),
+                    true,
+                    duration_ms,
+                    None,
+                )?;
+                Ok(BrokerResult {
+                    content: result.content,
+                    taint: true,
+                })
+            }
+            Err(fault) => {
+                self.emit_result(
+                    request_id,
+                    "blocked",
+                    None,
+                    false,
+                    duration_ms,
+                    Some(&fault.to_string()),
+                )?;
+                Err(Fault::new(
+                    format!(
+                        "{tool} on {target} could not execute and the failure is on the ledger: {}",
+                        fault.cause
+                    ),
+                    fault.fix,
+                ))
             }
         }
     }
