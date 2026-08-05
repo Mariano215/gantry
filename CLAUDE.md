@@ -65,6 +65,15 @@ work item, and `gantry scan` on this repo is expected to report it.
 - **Post-hoc review implies rollback.** Any capability whose rung and effect
   resolve to a `post` gate declares a rollback handle, or the policy refuses to
   load. — enforced since slice 03 by `Policy::validate`
+- **A rung is derived, never stored.** The rung a capability holds is
+  replayed from the ledger's `capability.run` and `rung.change` events, so a
+  third party recomputes it from the signed record; promotion needs the
+  clean-run threshold and a permitted approver, demotion is automatic on the
+  next failure. — enforced since slice 06 by `src/trust.rs`
+  (`TrustState::replay`, `Orchestrator::step`); exercised by `tests/trust.rs`
+  and `docs/proof/06.md`. The gap: the derived rung is not yet consulted by
+  the broker's gate, which still reads the static capability rung from the
+  policy. — `[UNENFORCED]` `ci/gate-uses-earned-rung`
 - **A sensor that cannot fail is broken, not clean.** Every sensor declares a
   negative control it must reject; a sensor that passes its own negative
   control is reported as `broken`, never as a clean pass, so a green board of

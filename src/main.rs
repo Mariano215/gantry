@@ -8,6 +8,7 @@ use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::policy::Policy;
 use gantry::sensor::{Sensor, SensorRun, Verdict};
+use gantry::trust::Orchestrator;
 use gantry::Fault;
 use sha2::{Digest, Sha256};
 use std::env;
@@ -30,7 +31,9 @@ const USAGE: &str = "usage:
   gantry broker call <ledger-dir> <tool> <target>
   gantry audit <ledger-dir> <providers.json> <provider> <file>
   gantry sensor gate <ledger-dir> <sensor.json> <artifact>
-  gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>";
+  gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>
+  gantry orchestrate step <ledger-dir> <capability> <sensor.json> <artifact> [approver]
+  gantry trust history <ledger-dir> <capability>";
 
 fn main() {
     match run() {
@@ -221,6 +224,19 @@ fn run() -> Result<i32, Fault> {
         ["audit", ledger_dir, providers_path, provider_name, file] => {
             audit(ledger_dir, providers_path, provider_name, file)
         }
+        ["orchestrate", "step", ledger_dir, capability, sensor_path, artifact] => {
+            orchestrate_step(ledger_dir, capability, sensor_path, artifact, None)
+        }
+        ["orchestrate", "step", ledger_dir, capability, sensor_path, artifact, approver] => {
+            orchestrate_step(
+                ledger_dir,
+                capability,
+                sensor_path,
+                artifact,
+                Some(approver),
+            )
+        }
+        ["trust", "history", ledger_dir, capability] => trust_history(ledger_dir, capability),
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -329,6 +345,81 @@ fn audit(
     let head = run.seal("complete")?;
     println!("sealed at ledger size {}", head.size);
     Ok(exit)
+}
+
+/// One orchestrated step against the tracked policy: run the capability's
+/// sensor, record the outcome, and let the trust budget promote or demote.
+/// The rung is recomputed from the ledger every step, so a reader can derive
+/// it themselves.
+fn orchestrate_step(
+    ledger_dir: &str,
+    capability: &str,
+    sensor_path: &str,
+    artifact: &str,
+    approver: Option<&str>,
+) -> Result<i32, Fault> {
+    let sensor = Sensor::load(Path::new(sensor_path))?;
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let dir = Path::new(ledger_dir);
+    let ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let settings_path = Path::new(".claude/settings.json");
+    let pin = Pinning {
+        policy: "config/policy.json".into(),
+        instructions: Path::new("instructions/pack.md").into(),
+        settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+        diverged: settings_divergence(settings_path),
+    };
+    let mut orch = Orchestrator::open(ledger, policy, &format!("orchestrate:{capability}"), &pin)?;
+    let outcome = orch.step(capability, &sensor, Path::new(artifact), approver)?;
+    orch.seal("complete")?;
+    let change = outcome.change.map(|c| format!(", {c}")).unwrap_or_default();
+    println!(
+        "[orchestrate] {capability}: {} -> {} (sensor {:?}{change})",
+        outcome.rung_before.schema_name(),
+        outcome.rung_after.schema_name(),
+        outcome.verdict
+    );
+    Ok(0)
+}
+
+/// Reads a sealed ledger and narrates one capability's rung arc as a story.
+fn trust_history(ledger_dir: &str, capability: &str) -> Result<i32, Fault> {
+    let ledger = Ledger::open(Path::new(ledger_dir))?;
+    let events = ledger.events_with_subjects()?;
+    let policy = Policy::load(Path::new("config/policy.json"))?;
+    let start = policy
+        .capabilities
+        .iter()
+        .find(|c| c.id == capability)
+        .map(|c| c.rung)
+        .ok_or_else(|| {
+            Fault::new(
+                format!("capability {capability} is not in config/policy.json"),
+                "name a declared capability",
+            )
+        })?;
+    let lines = gantry::trust::narrate(&events, capability);
+    let state = gantry::trust::TrustState::replay(&events, capability, start);
+    println!(
+        "rung history for {capability} (started at {}):",
+        start.schema_name()
+    );
+    if lines.is_empty() {
+        println!("  (no rung changes recorded)");
+    }
+    for l in &lines {
+        println!("  {l}");
+    }
+    println!(
+        "now at {} with {} clean run(s) since entering it",
+        state.rung.schema_name(),
+        state.clean_since_rung
+    );
+    Ok(0)
 }
 
 /// Runs one sensor against an artifact and records the verdict. With a

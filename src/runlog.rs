@@ -50,6 +50,12 @@ impl RunCore {
         self.ledger.latest_head()
     }
 
+    /// The run's events so far, subjects inlined under `_subject`, for
+    /// replaying state (rung history, trust budget) off the ledger itself.
+    pub fn replayable_events(&self) -> Result<Vec<Value>, Fault> {
+        self.ledger.events_with_subjects()
+    }
+
     pub fn append(&mut self, kind: &str, subject: Value) -> Result<(), Fault> {
         let seq = self.next_seq;
         self.next_seq += 1;

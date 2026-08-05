@@ -52,6 +52,33 @@ impl Rung {
             Rung::Autonomous => "autonomous",
         }
     }
+
+    /// The ladder, low to high. Promotion moves up one, demotion down one;
+    /// neither wraps.
+    pub fn up(self) -> Option<Rung> {
+        match self {
+            Rung::Led => Some(Rung::Assisted),
+            Rung::Assisted => Some(Rung::Autonomous),
+            Rung::Autonomous => None,
+        }
+    }
+
+    pub fn down(self) -> Option<Rung> {
+        match self {
+            Rung::Led => None,
+            Rung::Assisted => Some(Rung::Led),
+            Rung::Autonomous => Some(Rung::Assisted),
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Rung> {
+        match s {
+            "led" => Some(Rung::Led),
+            "assisted" => Some(Rung::Assisted),
+            "autonomous" => Some(Rung::Autonomous),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

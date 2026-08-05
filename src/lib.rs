@@ -8,6 +8,7 @@ pub mod runlog;
 pub mod sandbox;
 pub mod secrets;
 pub mod sensor;
+pub mod trust;
 
 use std::fmt;
 

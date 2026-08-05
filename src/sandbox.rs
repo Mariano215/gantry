@@ -9,8 +9,20 @@
 use crate::Fault;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
+
+static SANDBOX_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// A process-unique scratch directory under TMPDIR. Run ids are millisecond
+/// timestamps, so two runs opened in the same millisecond (parallel tests,
+/// tight loops) would otherwise share a sandbox workdir and each other's
+/// staged files; the atomic suffix makes the path unique regardless.
+pub fn unique_run_dir(prefix: &str) -> PathBuf {
+    let n = SANDBOX_SEQ.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("{prefix}-{}-{n}", std::process::id()))
+}
 
 pub struct Sandbox {
     profile: String,

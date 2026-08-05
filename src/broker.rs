@@ -136,10 +136,8 @@ impl BrokerRun {
             })
             .unwrap_or_default();
         let core = RunCore::open(ledger, actor, authority);
-        let sandbox = Sandbox::per_run(
-            &std::env::temp_dir().join(format!("gantry-run-{}", core.run_id())),
-            &egress_allow,
-        )?;
+        let sandbox =
+            Sandbox::per_run(&crate::sandbox::unique_run_dir("gantry-run"), &egress_allow)?;
         // Only handles some capability declares can hold a value at all.
         let declared_handles: Vec<String> = policy
             .capabilities

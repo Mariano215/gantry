@@ -7,6 +7,7 @@ use crate::merkle::{self, Hash};
 use crate::Fault;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write as _;
@@ -163,6 +164,31 @@ impl Ledger {
 
     pub fn size(&self) -> usize {
         self.leaves.len()
+    }
+
+    /// Every appended event as a JSON object with its subject payload inlined
+    /// under `_subject`, in append order. This is what a replay over the
+    /// ledger reads: the same envelopes an auditor exports, joined to the
+    /// payloads that are still retained. An expired payload inlines as null.
+    pub fn events_with_subjects(&self) -> Result<Vec<Value>, Fault> {
+        let mut out = Vec::with_capacity(self.envelopes.len());
+        for env in &self.envelopes {
+            let mut obj = serde_json::to_value(env).map_err(|e| {
+                Fault::new(
+                    format!("envelope does not serialise: {e}"),
+                    "report this as a bug; Envelope is serialisable by construction",
+                )
+            })?;
+            let subject = self
+                .payload_path(&env.subject_hash)
+                .ok()
+                .and_then(|p| fs::read_to_string(p).ok())
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .unwrap_or(Value::Null);
+            obj["_subject"] = subject;
+            out.push(obj);
+        }
+        Ok(out)
     }
 
     pub fn append(&mut self, ev: NewEvent) -> Result<Envelope, Fault> {
