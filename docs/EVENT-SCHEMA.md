@@ -1,5 +1,8 @@
 # Event schema, v2 (slice 01)
 
+Envelope, subject, attestation, tree head and the rest are defined in
+`docs/GLOSSARY.md` if you are meeting them for the first time.
+
 Everything downstream is a consumer of this document. v1 was settled in slice
 00 and then tested by writing a real trace by hand; the six changes below came
 out of that proof (`docs/proof/00.md` section 7) and are applied here before
