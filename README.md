@@ -149,7 +149,17 @@ no network and no server:
 ```
 $ ./target/debug/gantry ledger verify /tmp/demo/ledger
 entries: 14
+attestations verified against config/actor-keys.json: 14
+of those, 14 were signed under a key whose seed is published, so they prove
+which run wrote the event and not who operated it; a deployment registers its
+own key and keeps the seed
 ```
+
+That second paragraph is the point. Every event a run appends is signed, and
+the laptop profile's signing seed is tracked in this repository, so anyone
+holding the checkout can produce a signature that verifies. That still proves
+which run wrote an event and it is not attribution, so the tool says so rather
+than printing a line a deployment with a protected key would print.
 
 Score what just happened:
 
@@ -157,7 +167,7 @@ Score what just happened:
 $ ./target/debug/gantry score /tmp/demo/ledger
 | Primitive | Score | Evidence |
 |---|---|---|
-| 01 Instruction | 3 | instruction pack version-pinned on every run.open; no lifecycle telemetry, so capped at 3 |
+| 01 Instruction | 3 | instruction pack version-pinned on every run.open |
 | 02 Context delivery | N/A | N/A: no telemetry for this primitive in this ledger |
 | 03 Context management | N/A | N/A: no telemetry for this primitive in this ledger |
 | 04 Tool interface | 4 | tool results carry taint |
@@ -216,27 +226,63 @@ every push.
 
 ## The console
 
-Gantry has one web UI, and it is deliberately small. The binary serves it
-itself, so there is no second process in the container and no build step.
+The binary serves an operator console from the same process. No second
+service, no build step, no package manager: the assets are hand-written HTML,
+CSS and ES modules embedded at compile time, and the logo travels as a data
+URI. Nothing is fetched from any host, which is what lets the air-gap claim
+survive having a UI at all.
 
 ```
 $ ./target/debug/gantry console /tmp/demo/ledger 127.0.0.1:8731
 console at http://127.0.0.1:8731/ (ctrl-c to stop)
 ```
 
-Open that address and you get the conformance scorecard: the overall level,
-one row per primitive with its score colour-coded, and the evidence sentence
-behind each number. The ledger is re-scored on every request, so the page is
-the current state rather than a snapshot. It binds loopback by default; an
-operator who exposes it further does so on purpose.
+<p align="center">
+  <img src="docs/assets/console-overview.png" alt="The console overview: overall level, the twelve primitives, event volume, attestation coverage and the signed tree head" width="900">
+</p>
 
-`gantry score <ledger> <rules.json> <out.html>` writes the same page to a file
-if you want to attach it to a report.
+Six views over a read-only JSON API (`docs/CONSOLE-API.md`):
 
-What the console is not, yet: there is no ledger browser, no run timeline, no
-approval inbox, no live event stream. Those are operator and auditor surfaces
-that the ledger supports but the UI does not draw. The console is for reading
-the score. Everything else is CLI.
+- **Overview**, above. The overall level, the twelve primitives with the
+  evidence sentence behind each number, event volume, the signed tree head,
+  and how many events carry an attestation.
+- **Ledger**, the event stream with filters by kind, run, actor and time.
+  Expand a row for its subject, authority block, attestation state and
+  position in the tree.
+- **Run**, one run as a waterfall: model calls, tool requests, policy
+  decisions, sandbox executions and sensor verdicts in order, denial reasons
+  inline. An incident review reads this and nothing else.
+- **Policy**, every rule with its decision, message and how many times it
+  fired. A rule that never fires is shown, not hidden.
+- **Trust**, each capability's declared rung against the rung it earned from
+  replay, and which one the broker actually gates on.
+- **Verify**, the verification result and the offline command that reproduces
+  it.
+
+The API is read-only by decision. It cannot approve, promote, demote or
+append, because a UI that can move a rung is an authority surface and the
+laptop profile has no identity story for one. It binds loopback by default.
+
+### It refuses to render a broken ledger as a healthy one
+
+Alter one event on a ledger and the console does not show you a dashboard
+with a warning badge. The failure takes over:
+
+<p align="center">
+  <img src="docs/assets/console-tampered.png" alt="The console refusing to render a tampered ledger: three named faults and the offline command that reproduces them" width="900">
+</p>
+
+Three faults named, including the attestation that no longer verifies, the
+exact offline command that reaches the same verdict without the server, and a
+banner that cannot be dismissed for the rest of the session. The console
+never claims to have verified anything itself. It reports what the server
+found and hands you the command that checks the server.
+
+`gantry score <ledger> <rules.json> <out.html>` still writes the scorecard as
+a single self-contained file, for attaching to a report.
+
+Not built yet: no approval inbox, no inclusion-proof view, no sensor board,
+no anchoring view. Live update is a poll, not a stream.
 
 ## What runs today
 
@@ -277,6 +323,9 @@ the score. Everything else is CLI.
 - **Conformance scorer** (`src/scorer.rs`): the rubric as a running service.
   Every predicate is a statement about ledger events, so it cannot be talked
   into a better number.
+- **Console and its API** (`src/console.rs`, `assets/`): eight read-only
+  routes over the ledger and six views on top of them, served by the same
+  binary from the same process, standard library only and no new dependency.
 
 `gantry` with no arguments lists every subcommand.
 
@@ -289,7 +338,7 @@ same twelve numbers without trusting the binary.
 
 | # | Primitive | Score | Why |
 |---|---|---|---|
-| 01 | Instruction | 3 | Instruction pack version-pinned per run; no lifecycle telemetry, so capped at 3. |
+| 01 | Instruction | 4 | The instruction-lifecycle sensor gates the pack against a review record. The level is earned by the control running, never by it failing. |
 | 02 | Context delivery | 3 | Normalised model.call events with a pinned prompt hash. |
 | 03 | Context management | 3 | Window budget and actual recorded per call; graph retrieval ledgered with its byte cost and staleness re-reads. |
 | 04 | Tool interface | 4 | MCP-shaped registry, taint on every result. |
@@ -302,9 +351,13 @@ same twelve numbers without trusting the binary.
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
 | 12 | Governance | 3 | Authority-as-code produced a named denial; the running permission mode is recorded per event and divergence from the tracked declaration is reported. |
 
-**Overall level: 3.** Four layers stand at 4. The floor moved from 2 to 3 when
-graph retrieval started emitting telemetry, not when this file was edited.
-That is the whole design: the number follows the record.
+**Overall level: 3.** Five layers stand at 4, and seven sit at 3, which is why
+the overall number has not moved: it is the minimum, and the minimum is the
+honest figure. Primitive 01 reached 4 when the instruction-lifecycle sensor
+started gating the pack and `docs/proof/08-run.sh` started running it. Adding
+the scoring rule alone changed nothing, because the self-audit did not exercise
+the layer, and the scorer reads telemetry. That is the whole design working:
+the number follows the record, including when the record is disappointing.
 
 Reproduce:
 
@@ -353,7 +406,9 @@ does not depend on `PATH` order.
 |---|---|
 | `docs/PRIMITIVES.md` | The full rubric with scoring anchors for all twelve layers |
 | `docs/CONCEPT.md` | The thesis and the architecture decisions, including why not blockchain |
-| `docs/PLAN.md` | The slice order and why each slice makes the next one safer |
+| `docs/PLAN.md` | The slice order for the first nine, and why each made the next one safer |
+| `docs/PLAN-2.md` | What is left after those nine, and the order it lands in |
+| `docs/CONSOLE-API.md` | The read-only API the console renders, and the rules it must not break |
 | `docs/POLICY-SCHEMA.md` | How to write policy: rules, capabilities, gates, rollback handles |
 | `docs/EVENT-SCHEMA.md` | Every event type on the ledger and its fields |
 | `docs/proof/` | One adversarial proof per slice. Each was produced by running the thing, not by reasoning about it |
