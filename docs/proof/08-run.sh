@@ -29,6 +29,11 @@ $BIN broker call $L Read docs/PLAN.md >/dev/null 2>&1 || true
 echo "clean finding" > $WORK/art.md
 $BIN sensor gate $L docs/proof/fixtures/no-private-key.json $WORK/art.md >/dev/null 2>&1 || true
 $BIN sensor gate $L docs/proof/fixtures/broken-sensor.json $WORK/art.md >/dev/null 2>&1 || true
+# Instruction lifecycle (1): gate the real pack against the review record. A
+# self-audit that never checks its own instructions has no lifecycle
+# telemetry, and primitive 1 stays at 3 by the same rule that governs the
+# rest: the score follows what ran.
+$BIN sensor gate $L templates/laptop/config/sensors/instruction-lifecycle.json instructions/pack.md >/dev/null 2>&1 || true
 
 # Orchestrator: enough clean runs to earn a promotion under a named approver (7).
 THRESHOLD=$(jq -r '.trust_budget.promotion.runs_at_rung' config/policy.json)
