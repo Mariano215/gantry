@@ -95,6 +95,12 @@ case "$propagated" in
 esac
 echo "hook injects the observed mode, leaves unrelated and unobserved commands untouched, and the export propagates through the rewritten command"
 
+echo "== the console renders ledger values, not just HTTP 200 (ci/console-render) =="
+if ! zsh ci/console-render.sh; then
+  echo "the operator console did not render values that came off the ledger. Fix: read the line above, which names the view and the missing value; the front end in assets/ and the route in src/console.rs have to move together, and docs/CONSOLE-API.md is the contract between them"
+  exit 1
+fi
+
 echo "== every dependency has a note in docs/DEPENDENCIES.md =="
 deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
 for dep in ${(f)deps}; do
