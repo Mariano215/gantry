@@ -6,6 +6,7 @@ use gantry::event::NewEvent;
 use gantry::gateway::{self, msg, GatewayRun, Pinning};
 use gantry::ledger::{self, InclusionBundle, Ledger};
 use gantry::Fault;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::io::Read as _;
@@ -128,12 +129,12 @@ fn run() -> Result<i32, Fault> {
                 Ledger::init(dir)?
             };
             let pack_path = Path::new("instructions/pack.md");
+            let settings_path = Path::new(".claude/settings.json");
             let pin = Pinning {
                 policy: "docs/POLICY-SCHEMA.md".into(),
                 instructions: pack_path.into(),
-                settings: Some(Path::new(".claude/settings.json"))
-                    .filter(|p| p.exists())
-                    .map(Into::into),
+                settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
+                diverged: settings_divergence(settings_path),
             };
             let system = read_file(&pack_path.display().to_string())?;
             let mut run = GatewayRun::open(ledger, "gateway-smoke", &pin)?;
@@ -153,12 +154,36 @@ fn run() -> Result<i32, Fault> {
                 ],
             )?;
             println!("[{}] {}", provider.name, a2.content.trim());
+            let run_id = run.run_id().to_string();
             let head = run.seal("complete")?;
-            println!("sealed: {} events, head size {}", head.size, head.size);
+            println!("sealed: run {} with {} ledger entries", run_id, head.size);
             Ok(0)
         }
         [] => Err(usage_fault("no subcommand given")),
         _ => Err(usage_fault(format!("unknown command: {}", args.join(" ")))),
+    }
+}
+
+/// Compares the tracked `.claude/settings.json` (the git HEAD blob) against
+/// the file on disk. A rule id in the result means the running host
+/// permissions may not match what version control declares.
+fn settings_divergence(path: &Path) -> Vec<String> {
+    if !path.exists() {
+        return Vec::new();
+    }
+    let diverged = vec!["host_permissions.settings_hash".to_string()];
+    let tracked = process::Command::new("git")
+        .args(["show", "HEAD:.claude/settings.json"])
+        .output();
+    match tracked {
+        Ok(out) if out.status.success() => {
+            let tracked_hash = format!("sha256:{}", hex::encode(Sha256::digest(&out.stdout)));
+            match gateway::file_hash(path) {
+                Ok(disk_hash) if disk_hash == tracked_hash => Vec::new(),
+                _ => diverged,
+            }
+        }
+        _ => diverged,
     }
 }
 

@@ -51,8 +51,10 @@ asserted.
 Per `docs/EVENT-SCHEMA.md`: provider, model, declared inputs and whether
 each arrived, window budget and actual, prompt and completion token counts
 from the response `usage`, cost (zero for self-hosted), latency, prompt
-hash. The raw prompt is hashed, stored beside the ledger under retention,
-never in the envelope.
+hash. Slice 02 records the hash only and stores no prompt payload, by
+decision: storage under retention arrives with the broker slices. A
+provider error body is likewise recorded as status plus a hash of the body,
+never verbatim.
 
 ## Pinning
 

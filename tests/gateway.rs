@@ -17,7 +17,7 @@ fn pinning(dir: &Path) -> Pinning {
     let pack = dir.join("pack.md");
     fs::write(&policy, "policy v1").unwrap();
     fs::write(&pack, "you are an audit agent").unwrap();
-    Pinning { policy, instructions: pack, settings: None }
+    Pinning { policy, instructions: pack, settings: None, diverged: vec![] }
 }
 
 #[test]
@@ -49,6 +49,23 @@ fn open_and_seal_bracket_the_run() {
     assert!(auth["policy_version"].as_str().unwrap().starts_with("sha256:"));
     assert!(auth["instruction_version"].as_str().unwrap().starts_with("sha256:"));
     assert_eq!(auth["diverged"], serde_json::json!([]));
+}
+
+#[test]
+fn settings_hash_pins_the_settings_file() {
+    let dir = workdir("settings-hash");
+    let mut pin = pinning(&dir);
+    let settings_path = dir.join("settings.json");
+    fs::write(&settings_path, r#"{"allow":[]}"#).unwrap();
+    pin.settings = Some(settings_path.clone());
+    let led = dir.join("ledger");
+    let run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+    run.seal("complete").unwrap();
+
+    let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+    let open: serde_json::Value = serde_json::from_str(lines.lines().next().unwrap()).unwrap();
+    let expected = gantry::gateway::file_hash(&settings_path).unwrap();
+    assert_eq!(open["authority"]["settings_hash"], expected);
 }
 
 /// Minimal canned HTTP server: accepts one connection, returns `body` with
@@ -165,10 +182,14 @@ fn call_appends_model_call_event() {
 fn missing_key_faults_before_any_request() {
     let dir = workdir("call-nokey");
     let pin = pinning(&dir);
-    let mut run = GatewayRun::open(Ledger::init(&dir.join("ledger")).unwrap(), "smoke", &pin).unwrap();
+    let led = dir.join("ledger");
+    let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
     let p = provider("http://127.0.0.1:1/v1", "stub", Some("GANTRY_TEST_UNSET_KEY"));
     let fault = run.call(&p, &[msg("user", "hello")]).unwrap_err();
     assert!(fault.fix.contains("GANTRY_TEST_UNSET_KEY"), "fix names the var: {fault}");
+
+    let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+    assert_eq!(lines.lines().count(), 1, "only run.open before any request attempt");
 }
 
 /// A provider error body that echoes request headers (proxies and gateways
@@ -219,22 +240,33 @@ fn http_500_is_a_ledger_event() {
     let fault = run.call(&provider(&base, "stub", None), &[msg("user", "hi")]).unwrap_err();
     run.seal("failed").unwrap();
     assert!(fault.cause.contains("on the ledger"), "{fault}");
+    assert!(fault.cause.contains("500"), "outer fault keeps the inner cause: {fault}");
     let subject = read_subject(&led, 1);
     assert_eq!(subject["outcome"], "error");
-    assert!(subject["error"]["cause"].as_str().unwrap().contains("500"));
+    assert_eq!(subject["error"]["cause"], "provider returned HTTP 500");
+    assert!(subject["error"]["body_hash"].as_str().unwrap().starts_with("sha256:"));
     assert!(!subject["error"]["fix"].as_str().unwrap().is_empty());
     assert!(gantry::ledger::verify(&led).unwrap().ok());
+
+    // Error-path and ok-path subjects expose the same top-level keys.
+    let (ok_base, ok_srv) = stub(200, OK_BODY);
+    let mut ok_run = GatewayRun::open(Ledger::init(&dir.join("ledger-ok")).unwrap(), "smoke", &pin).unwrap();
+    ok_run.call(&provider(&ok_base, "stub", None), &[msg("user", "hi")]).unwrap();
+    ok_run.seal("complete").unwrap();
+    ok_srv.join().unwrap();
+    let ok_subject = read_subject(&dir.join("ledger-ok"), 1);
+    assert_eq!(sorted_keys(&subject), sorted_keys(&ok_subject), "error and ok subjects share a shape");
 }
 
 #[test]
 fn connection_refused_is_a_ledger_event() {
     let dir = workdir("call-refused");
     let pin = pinning(&dir);
-    // Bind then drop, so the port exists but nothing listens.
-    let port = { std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() };
     let led = dir.join("ledger");
     let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
-    let p = provider(&format!("http://127.0.0.1:{port}/v1"), "stub", None);
+    // 127.0.0.1:1 is a reserved low port nothing listens on; deterministic
+    // refusal without a bind-then-drop race.
+    let p = provider("http://127.0.0.1:1/v1", "stub", None);
     run.call(&p, &[msg("user", "hi")]).unwrap_err();
     run.seal("failed").unwrap();
     let subject = read_subject(&led, 1);
@@ -290,4 +322,18 @@ fn key_bytes_never_reach_the_ledger() {
         let text = fs::read_to_string(&f).unwrap_or_default();
         assert!(!text.contains(canary), "key bytes found in {}", f.display());
     }
+}
+
+#[test]
+fn base_url_with_credential_is_rejected() {
+    let dir = workdir("providers-cred");
+    let path = dir.join("providers.json");
+    fs::write(
+        &path,
+        r#"[{"name":"bad","base_url":"https://user:pass@example.com/v1","model":"m","window_budget":1000}]"#,
+    )
+    .unwrap();
+    let fault = gantry::gateway::load_providers(&path).unwrap_err();
+    assert!(fault.cause.contains("bad"), "names the provider: {fault}");
+    assert!(fault.fix.contains("key_env"), "fix points at key_env: {fault}");
 }

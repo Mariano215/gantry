@@ -67,6 +67,10 @@ pub struct Pinning {
     pub policy: PathBuf,
     pub instructions: PathBuf,
     pub settings: Option<PathBuf>,
+    /// Rule ids for authority that failed to match its tracked declaration
+    /// (schema constraint: `authority.diverged`). The caller computes this;
+    /// the gateway only records it.
+    pub diverged: Vec<String>,
 }
 
 /// An open run. Owning the only route to a model call is what makes the
@@ -87,12 +91,24 @@ pub fn load_providers(path: &Path) -> Result<Vec<Provider>, Fault> {
             "check the path; the tracked file is config/providers.json",
         )
     })?;
-    serde_json::from_str(&text).map_err(|e| {
+    let providers: Vec<Provider> = serde_json::from_str(&text).map_err(|e| {
         Fault::new(
             format!("{} does not parse as a provider list: {e}", path.display()),
             "each entry needs name, base_url, model, window_budget; key_env and cost rates are optional",
         )
-    })
+    })?;
+    for p in &providers {
+        if p.base_url.contains('@') {
+            return Err(Fault::new(
+                format!(
+                    "provider {} has a credential embedded in base_url, which would be recorded on the ledger",
+                    p.name
+                ),
+                "use key_env for credentials instead of a userinfo segment in base_url",
+            ));
+        }
+    }
+    Ok(providers)
 }
 
 impl GatewayRun {
@@ -107,7 +123,7 @@ impl GatewayRun {
             "policy_version": file_hash(&pin.policy)?,
             "instruction_version": instruction_version,
             "settings_hash": settings_hash,
-            "diverged": [],
+            "diverged": pin.diverged.clone(),
         });
         let actor = json!({
             "type": "agent",
@@ -200,12 +216,18 @@ impl GatewayRun {
             },
             None => None,
         };
+        // Slice 02 records the hash only and stores no prompt payload, by
+        // decision: storage under retention arrives with the broker slices.
+        // The hash is a commitment, not a pointer.
         let prompt_hash = crate::event::subject_hash(&json!(messages))?;
-        let url = format!("{}/chat/completions", provider.base_url);
+        let base_url = provider.base_url.trim_end_matches('/');
+        let url = format!("{base_url}/chat/completions");
         let body = json!({ "model": provider.model, "messages": messages });
         let started = std::time::Instant::now();
         let outcome = http_post_json(&url, key.as_deref(), &body);
         let latency_ms = started.elapsed().as_millis() as u64;
+        // declared_inputs is a constant placeholder until the broker declares real inputs.
+        let declared_inputs = json!([{"name": "messages", "arrived": true}]);
 
         match outcome {
             Ok(resp) => {
@@ -213,14 +235,20 @@ impl GatewayRun {
                     .as_str()
                     .unwrap_or_default()
                     .to_string();
-                let prompt_tokens = resp["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
-                let completion_tokens = resp["usage"]["completion_tokens"].as_u64().unwrap_or(0);
-                // Token counts are far below 2^52, so the f64 conversion is exact.
-                #[allow(clippy::cast_precision_loss)]
-                let cost_usd = (prompt_tokens as f64 * provider.cost_in_per_mtok
-                    + completion_tokens as f64 * provider.cost_out_per_mtok)
-                    / 1_000_000.0;
-                self.cost_total_usd += cost_usd;
+                let prompt_tokens_seen = resp["usage"]["prompt_tokens"].as_u64();
+                let completion_tokens_seen = resp["usage"]["completion_tokens"].as_u64();
+                let prompt_tokens = prompt_tokens_seen.unwrap_or(0);
+                let completion_tokens = completion_tokens_seen.unwrap_or(0);
+                let cost_usd = prompt_tokens_seen.zip(completion_tokens_seen).map(|(p, c)| {
+                    // Token counts are far below 2^52, so the f64 conversion is exact.
+                    #[allow(clippy::cast_precision_loss)]
+                    let cost = (p as f64 * provider.cost_in_per_mtok + c as f64 * provider.cost_out_per_mtok)
+                        / 1_000_000.0;
+                    cost
+                });
+                if let Some(cost) = cost_usd {
+                    self.cost_total_usd += cost;
+                }
                 self.append_event(
                     "model.call",
                     json!({
@@ -228,10 +256,10 @@ impl GatewayRun {
                         "model": provider.model,
                         "base_url": provider.base_url,
                         "key_env": provider.key_env,
-                        "declared_inputs": [{"name": "messages", "arrived": true}],
+                        "declared_inputs": declared_inputs,
                         "prompt_hash": prompt_hash,
-                        "window": {"budget": provider.window_budget, "actual": prompt_tokens + completion_tokens},
-                        "tokens": {"prompt": prompt_tokens, "completion": completion_tokens},
+                        "window": {"budget": provider.window_budget, "actual": prompt_tokens_seen.zip(completion_tokens_seen).map(|(p, c)| p + c)},
+                        "tokens": {"prompt": prompt_tokens_seen, "completion": completion_tokens_seen},
                         "cost_usd": cost_usd,
                         "latency_ms": latency_ms,
                         "outcome": "ok",
@@ -240,7 +268,7 @@ impl GatewayRun {
                 )?;
                 Ok(CallResult { content, prompt_tokens, completion_tokens, latency_ms })
             }
-            Err(fault) => {
+            Err(err) => {
                 self.append_event(
                     "model.call",
                     json!({
@@ -248,19 +276,19 @@ impl GatewayRun {
                         "model": provider.model,
                         "base_url": provider.base_url,
                         "key_env": provider.key_env,
-                        "declared_inputs": [{"name": "messages", "arrived": true}],
+                        "declared_inputs": declared_inputs,
                         "prompt_hash": prompt_hash,
                         "window": {"budget": provider.window_budget, "actual": null},
                         "tokens": null,
-                        "cost_usd": 0.0,
+                        "cost_usd": null,
                         "latency_ms": latency_ms,
                         "outcome": "error",
-                        "error": {"cause": fault.cause, "fix": fault.fix.clone()},
+                        "error": {"cause": err.ledger_cause, "fix": err.fix.clone(), "body_hash": err.body_hash},
                     }),
                 )?;
                 Err(Fault::new(
-                    format!("model call to {} failed and is on the ledger", provider.name),
-                    fault.fix,
+                    format!("model call to {} failed and is on the ledger: {}", provider.name, err.human_cause),
+                    err.fix,
                 ))
             }
         }
@@ -298,30 +326,54 @@ fn scrub(key: Option<&str>, text: &str) -> String {
     }
 }
 
-fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, Fault> {
+/// A failed call, in the two shapes it needs to reach: the ledger gets a
+/// stable cause plus a hash of the raw body, never the body text itself
+/// (proxies echo request headers into error pages more often than not); the
+/// human at the terminal gets the scrubbed excerpt.
+struct CallError {
+    ledger_cause: String,
+    human_cause: String,
+    body_hash: Option<String>,
+    fix: String,
+}
+
+fn http_post_json(url: &str, key: Option<&str>, body: &Value) -> Result<Value, CallError> {
     let mut req = ureq::post(url).timeout(std::time::Duration::from_secs(180));
     if let Some(k) = key {
         req = req.set("Authorization", &format!("Bearer {k}"));
     }
     match req.send_json(body.clone()) {
         Ok(resp) => resp.into_json::<Value>().map_err(|e| {
-            Fault::new(
-                format!("provider returned a non-JSON body: {e}"),
-                "check base_url points at an OpenAI-compatible /v1 endpoint",
-            )
+            let cause = format!("provider returned a non-JSON body: {e}");
+            CallError {
+                ledger_cause: cause.clone(),
+                human_cause: cause,
+                body_hash: None,
+                fix: "check base_url points at an OpenAI-compatible /v1 endpoint".to_string(),
+            }
         }),
         Err(ureq::Error::Status(code, resp)) => {
-            let text = resp.into_string().unwrap_or_default();
-            let text = text.chars().take(300).collect::<String>();
-            Err(Fault::new(
-                scrub(key, &format!("provider returned HTTP {code}: {text}")),
-                "check the model name, the key, and the provider status page",
-            ))
+            let raw = resp.into_string().unwrap_or_default();
+            let body_hash = format!("sha256:{}", hex::encode(Sha256::digest(raw.as_bytes())));
+            let excerpt: String = raw.chars().take(300).collect();
+            Err(CallError {
+                ledger_cause: format!("provider returned HTTP {code}"),
+                human_cause: scrub(key, &format!("provider returned HTTP {code}: {excerpt}")),
+                body_hash: Some(body_hash),
+                fix: "check the model name, the key, and the provider status page".to_string(),
+            })
         }
-        Err(ureq::Error::Transport(t)) => Err(Fault::new(
-            scrub(key, &format!("cannot reach {url}: {t}")),
-            "check the base_url, the network route, and that the endpoint is up",
-        )),
+        Err(ureq::Error::Transport(t)) => {
+            // Transport failures carry no response body to hash or scrub the
+            // key out of separately from the message itself.
+            let cause = scrub(key, &format!("cannot reach {url}: {t}"));
+            Err(CallError {
+                ledger_cause: cause.clone(),
+                human_cause: cause,
+                body_hash: None,
+                fix: "check the base_url, the network route, and that the endpoint is up".to_string(),
+            })
+        }
     }
 }
 
