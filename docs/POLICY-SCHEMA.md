@@ -253,22 +253,23 @@ that contains no imperative.
 
 ## The three profiles
 
-One profile sets isolation, gates, anchoring and identity together. Rung
-defaults come from the profile and stay overridable per capability.
+A profile is a set of declarations that differ per deployment. This table
+carries only the rows something runs, and each names what runs it. The rows
+that described behaviour nothing implements were deleted rather than left
+looking like coverage; what they described is listed under the table as
+unbuilt.
 
-| Field | `laptop` | `team` | `regulated` |
-|---|---|---|---|
-| `isolation.declared` | `oci+seccomp` | `kernel-sandbox` | `microvm` |
-| `isolation.scores` | 3 | 4 | 4 |
-| `egress.allow` | `[]` | explicit list | explicit list |
-| `identity.declared` | `local` | `oidc` | `oidc` |
-| `identity.fallback_permitted` | true | true | **false** |
-| `ledger.anchoring` | `none` | `object_store`, daily | `rfc3161` |
-| `ledger.key_custody` | `software` | `software` | `hsm` or `tpm` |
-| `rung_default` | `autonomous` | `assisted` | `assisted` |
-| `promotion.approver` | `any` | `any` | **`named`** |
-| `on_unavailable` | `degrade` | `degrade` | **`refuse`** |
-| `attestation` key seed | published key permitted | held key only | held key only |
+| Field | `laptop` | `team` | `regulated` | Enforced by |
+|---|---|---|---|---|
+| `isolation.declared` | `seatbelt` | `seatbelt` | `seatbelt` | `Sandbox::per_run` (`src/sandbox.rs`) builds the profile and `run.open` records `active_backend` beside the declaration; `tests/sandbox.rs` |
+| `egress.allow` | `[]` | explicit list | explicit list | the same generated seatbelt profile: an entry becomes a `remote ip` allow and everything else, loopback included, is denied; `tests/sandbox.rs` |
+| `promotion.approver` | `any` | `any` | **`named`** | `TrustBudget::approver_ok` (`src/trust.rs`), consulted by `gantry approve` and by promotion in `Orchestrator::step`; `tests/broker.rs` |
+| `on_unavailable` | `degrade` | `degrade` | **`refuse`** | `policy::availability_check` (`src/policy.rs`) at run open; `tests/profiles.rs`, `ci/run.sh` (`ci/profile-unavailable-refuses`) |
+| `attestation` key seed | published key permitted | held key only | held key only | `ActorSigner::declared` (`src/runlog.rs`); `tests/broker.rs` |
+
+Every value in the isolation row is `seatbelt` because this build has one
+isolation backend. A profile is free to declare another, and the row below
+says what happens when it does.
 
 The attestation row is enforced at run open rather than at load, because it
 needs the key registry beside the policy: a profile other than `laptop` that
@@ -278,16 +279,42 @@ says which run wrote an event and nothing about who operated it. That is what
 a laptop claims and it is not what a `team` or `regulated` attestation is read
 as.
 
-Two rows carry the weight. `on_unavailable: refuse` is why `regulated` does not
-quietly become `laptop` when the HSM is missing: the control plane fails to
-start and says which requirement was unavailable. And `isolation.scores: 3` on
-`laptop` is stated in the policy rather than computed by the scorer's goodwill,
-so the default profile caps the overall level at 3 by declaration.
+`on_unavailable: refuse` is the row that carries the weight, and it is why
+`regulated` does not quietly become `laptop` when the HSM is missing.
+Availability is checked at run open, before the first event is appended: each
+requirement's declared value is compared against what the running system can
+provide, and under `refuse` a requirement nothing can provide is a `Fault`
+naming the field, the declared value, what this system does provide, and the
+action to take. Under `degrade` the run starts and the shortfall is written to
+`run.open` as `unavailable`, so the weakening is on the ledger rather than in
+nobody's head.
 
-The profile name never enters a score. The scorer reads `observed_by` sources.
-A `regulated` policy running on a machine whose `sandbox.active_backend`
-reports `oci+seccomp` scores 3 on primitive 05 and emits a `drift.report`
-naming the divergence. That is the whole reason `observed_by` is mandatory.
+Availability is not divergence, and the two are separate checks on purpose.
+Divergence is one declared value against the one value observed now, which is
+the Drift section below. Availability asks whether anything on the machine
+could meet the declaration at all, which is why `Providable` holds a set per
+field: a host that can boot a microvm answers yes for microvm even while a
+particular run sits inside seatbelt.
+
+### Declared but not built
+
+This build provides one isolation backend (seatbelt), local process identity,
+a local-file ledger with no anchoring, and a software-held actor key. Nothing
+here provides `microvm`, `kernel-sandbox`, `oci+seccomp`, `oidc`,
+`object_store`, `rfc3161`, `notary`, `hsm` or `tpm`, on any machine. A profile
+may still declare them, and the only thing that runs about such a declaration
+is the availability check: `refuse` stops the run and names it, `degrade`
+records it on `run.open`. Read a declaration in this list as a statement of
+intent that the control plane will not let you mistake for a control.
+
+`isolation.scores` and `rung_default` are read by no code at all. They are left
+in the shape block above because a policy carrying them still loads, and they
+are named here so nobody reads them as a control. `identity.fallback_permitted`
+is in the same position: no identity fallback exists to permit or refuse.
+
+The profile name never enters a score. The scorer reads telemetry, never a
+profile name or a configuration value, which is what `observed_by` is for and
+why it is mandatory.
 
 ## Drift
 

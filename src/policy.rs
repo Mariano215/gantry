@@ -166,6 +166,154 @@ pub struct Policy {
     pub trust_budget: Value,
 }
 
+/// What the running system can provide for each profile requirement that has
+/// an availability question. The caller observes these at run open and passes
+/// them in; nothing here reads the system, which is what keeps this check and
+/// the drift check from being two copies of one observer.
+///
+/// Availability is not divergence. Divergence is "the policy declares microvm
+/// and this run observed seatbelt": one declared value against the one value
+/// currently in force, reported per field. Availability asks whether anything
+/// on this machine could meet the declaration at all, which is why each field
+/// is a set rather than a value: a host that can boot a microvm answers yes
+/// for microvm even while this particular run sits inside seatbelt.
+#[derive(Debug, Clone)]
+pub struct Providable {
+    pub isolation: Vec<String>,
+    pub identity: Vec<String>,
+    pub anchoring: Vec<String>,
+    pub key_custody: Vec<String>,
+}
+
+/// Declaring `none` asks for nothing, and nothing is always available.
+fn with_none(provided: &str) -> Vec<String> {
+    if provided == "none" {
+        vec!["none".to_string()]
+    } else {
+        vec![provided.to_string(), "none".to_string()]
+    }
+}
+
+impl Providable {
+    /// What this build can provide, given the isolation backend the caller
+    /// observed. The other three are fixed because this build implements
+    /// exactly one of each: identity is the local process identity, the ledger
+    /// is a local file with no anchoring, and the actor key is a software seed
+    /// read from a file or the environment. A policy naming `oidc`, `rfc3161`
+    /// or an `hsm` names something no code path here produces, on any machine.
+    pub fn for_this_build(isolation_backend: &str) -> Providable {
+        Providable {
+            isolation: with_none(isolation_backend),
+            identity: with_none("local"),
+            anchoring: vec!["none".to_string()],
+            key_custody: vec!["software".to_string()],
+        }
+    }
+}
+
+/// One profile requirement this system cannot meet with anything it has.
+#[derive(Debug, Clone, Serialize)]
+pub struct Shortfall {
+    pub field: String,
+    pub declared: String,
+    pub providable: Vec<String>,
+}
+
+impl Shortfall {
+    fn line(&self) -> String {
+        format!(
+            "{} declares {} and this system provides {}",
+            self.field,
+            self.declared,
+            self.providable.join(" or ")
+        )
+    }
+}
+
+/// Every `profile_requirements` field whose declared value is outside what the
+/// system can provide. An absent field asks for nothing and is not a
+/// shortfall; the hash fields (`instruction_pack`, `host_permissions`) and the
+/// egress allowlist have no availability question, and the attestation key is
+/// resolved by `ActorSigner::declared`.
+pub fn unavailable_requirements(requirements: &Value, providable: &Providable) -> Vec<Shortfall> {
+    let checks = [
+        (
+            "isolation.declared",
+            &requirements["isolation"]["declared"],
+            &providable.isolation,
+        ),
+        (
+            "identity.declared",
+            &requirements["identity"]["declared"],
+            &providable.identity,
+        ),
+        (
+            "ledger.anchoring",
+            &requirements["ledger"]["anchoring"],
+            &providable.anchoring,
+        ),
+        (
+            "ledger.key_custody",
+            &requirements["ledger"]["key_custody"],
+            &providable.key_custody,
+        ),
+    ];
+    checks
+        .iter()
+        .filter_map(|(field, declared, provided)| {
+            let declared = declared.as_str()?;
+            if provided.iter().any(|p| p == declared) {
+                return None;
+            }
+            Some(Shortfall {
+                field: field.to_string(),
+                declared: declared.to_string(),
+                providable: (*provided).clone(),
+            })
+        })
+        .collect()
+}
+
+/// `profile_requirements.on_unavailable`, applied at run open.
+///
+/// `refuse` stops the control plane before it appends anything and the fault
+/// names every requirement that is unavailable, so a `regulated` profile
+/// cannot quietly become a `laptop` on a machine with no HSM. `degrade` (the
+/// laptop default) returns the shortfalls for the caller to record on
+/// `run.open`, so the weakening is on the ledger rather than swallowed.
+///
+/// A value that is neither refuses on every run, empty shortfall list or not:
+/// a typo that fell through to degrade would be the silent degradation this
+/// field exists to rule out.
+pub fn availability_check(
+    profile: &str,
+    requirements: &Value,
+    providable: &Providable,
+) -> Result<Vec<Shortfall>, Fault> {
+    let stance = requirements["on_unavailable"].as_str().unwrap_or("degrade");
+    if stance != "degrade" && stance != "refuse" {
+        return Err(Fault::new(
+            format!("profile_requirements.on_unavailable is {stance}, which is neither degrade nor refuse"),
+            "set it to refuse, so an unavailable requirement stops the run, or to degrade, so the run starts and records the shortfall on run.open",
+        ));
+    }
+    let short = unavailable_requirements(requirements, providable);
+    if stance == "refuse" && !short.is_empty() {
+        let named = short
+            .iter()
+            .map(Shortfall::line)
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(Fault::new(
+            format!(
+                "profile {profile} sets on_unavailable refuse and this system cannot provide what it declares: {named}"
+            ),
+            "run this profile on a deployment that has those backends, or lower the declarations in profile_requirements to what this one provides; setting on_unavailable to degrade instead starts the run and records the shortfall, which is a weaker profile than the one declared",
+        ));
+    }
+    Ok(short)
+}
+
 /// One tool call as the evaluator sees it.
 #[derive(Debug, Clone)]
 pub struct CallRequest {

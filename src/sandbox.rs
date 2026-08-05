@@ -18,7 +18,10 @@ static SANDBOX_SEQ: AtomicU64 = AtomicU64::new(0);
 /// The isolation backend a run gets on this host. This is what
 /// `profile_requirements.isolation.observed_by: sandbox.active_backend`
 /// names, and it is the same expression `Sandbox::per_run` stamps on every
-/// `tool.request`, so the drift check and the event cannot disagree.
+/// `tool.request`, so the drift check and the event cannot disagree. It is
+/// readable without building a sandbox, because run open has to answer
+/// whether the declared isolation is available at all before it appends its
+/// first event.
 pub fn active_backend() -> &'static str {
     if Path::new(SANDBOX_EXEC).exists() {
         "seatbelt"
@@ -41,6 +44,7 @@ pub struct Sandbox {
     workdir: PathBuf,
     kind: &'static str,
 }
+
 
 impl Sandbox {
     /// Builds the per-run sandbox. `egress_allow` comes from

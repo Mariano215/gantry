@@ -106,6 +106,53 @@ echo "drift walked $(jq -r '.profile_requirements | keys | length' config/policy
 echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
+echo "== a regulated profile refuses to start on a machine that cannot provide what it declares (ci/profile-unavailable-refuses) =="
+cargo build --quiet
+reg_root=$(mktemp -d)
+mkdir -p "$reg_root/config" "$reg_root/instructions"
+printf 'you are an audit agent\n' > "$reg_root/instructions/pack.md"
+# The tracked laptop policy with the regulated profile's declarations. None of
+# microvm, oidc, rfc3161 or an hsm exists in this build, so this policy must
+# not start here. The attestation block goes because the tracked seed is
+# published, which a non-laptop profile refuses on its own; this check is
+# about availability, not about the fixture key.
+jq '.profile = "regulated"
+  | .profile_requirements.isolation.declared = "microvm"
+  | .profile_requirements.identity.declared = "oidc"
+  | .profile_requirements.ledger.anchoring = "rfc3161"
+  | .profile_requirements.ledger.key_custody = "hsm"
+  | .profile_requirements.on_unavailable = "refuse"
+  | del(.profile_requirements.attestation)' config/policy.json > "$reg_root/config/policy.json"
+reg_bin="$PWD/target/debug/gantry"
+if reg_out=$(cd "$reg_root" && "$reg_bin" broker call .ledger Read instructions/pack.md 2>&1); then
+  reg_status=0
+else
+  reg_status=$?
+fi
+reg_events="$reg_root/.ledger/events.jsonl"
+reg_appended=0
+[ -s "$reg_events" ] && reg_appended=1
+rm -rf "$reg_root"
+# The exit status decides, not the text: a run that printed a refusal and then
+# exited zero has started, and reading only the output would pass it.
+if [ "$reg_status" = 0 ]; then
+  echo "a regulated profile started on a machine with no microvm, no oidc, no rfc3161 and no hsm: $reg_out. Fix: profile_requirements.on_unavailable refuse must stop run open; see availability_check in src/policy.rs and its caller in BrokerRun::open"
+  exit 1
+fi
+case "$reg_out" in
+  *microvm*hsm*|*hsm*microvm*)
+    ;;
+  *)
+    echo "the refusal did not name the unavailable requirements: $reg_out. Fix: the fault from availability_check must name every declared value this system cannot provide, so a human at 3am knows which requirement to fix"
+    exit 1
+    ;;
+esac
+if [ "$reg_appended" != 0 ]; then
+  echo "the refused regulated run appended events. Fix: the availability check must run before the first append in BrokerRun::open"
+  exit 1
+fi
+echo "the regulated profile refused to start (exit $reg_status) and named its unavailable requirements"
+
 echo "== template init generates a per-install actor key and the harness it produces signs (ci/template-init-signs) =="
 cargo build --quiet
 gantry_bin="$PWD/target/debug/gantry"
