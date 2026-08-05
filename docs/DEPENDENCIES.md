@@ -19,3 +19,11 @@ Network capability: yes, and it is the point. The gateway adapter is the one
 chokepoint allowed to reach a model provider (architecture invariant one).
 Blocking client, rustls, no tokio tree. Tests never use it against a real
 host; the suite talks to loopback stubs only.
+
+## std::process (not a crate, noted anyway)
+
+Since slice 03 the broker executes shell commands through `sh -c`
+(`src/broker.rs`), strictly after an allow verdict from the policy. This is
+the crate's only process capability, and it sits behind the same chokepoint
+that records the call. Unsandboxed until slice 04, and the policy file says
+so: `profile_requirements.isolation.declared` is `none`.

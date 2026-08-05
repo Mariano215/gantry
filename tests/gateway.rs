@@ -17,7 +17,12 @@ fn pinning(dir: &Path) -> Pinning {
     let pack = dir.join("pack.md");
     fs::write(&policy, "policy v1").unwrap();
     fs::write(&pack, "you are an audit agent").unwrap();
-    Pinning { policy, instructions: pack, settings: None, diverged: vec![] }
+    Pinning {
+        policy,
+        instructions: pack,
+        settings: None,
+        diverged: vec![],
+    }
 }
 
 #[test]
@@ -46,8 +51,14 @@ fn open_and_seal_bracket_the_run() {
     assert_eq!(open["run_id"], seal["run_id"]);
     let auth = &open["authority"];
     assert_eq!(auth["profile"], "laptop");
-    assert!(auth["policy_version"].as_str().unwrap().starts_with("sha256:"));
-    assert!(auth["instruction_version"].as_str().unwrap().starts_with("sha256:"));
+    assert!(auth["policy_version"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
+    assert!(auth["instruction_version"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
     assert_eq!(auth["diverged"], serde_json::json!([]));
 }
 
@@ -126,8 +137,14 @@ const OK_BODY: &str = r#"{"choices":[{"message":{"role":"assistant","content":"s
 fn read_subject(led: &Path, line: usize) -> serde_json::Value {
     let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
     let env: serde_json::Value = serde_json::from_str(lines.lines().nth(line).unwrap()).unwrap();
-    let hex_part = env["subject_hash"].as_str().unwrap().trim_start_matches("sha256:");
-    serde_json::from_str(&fs::read_to_string(led.join("payloads").join(format!("{hex_part}.json"))).unwrap()).unwrap()
+    let hex_part = env["subject_hash"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("sha256:");
+    serde_json::from_str(
+        &fs::read_to_string(led.join("payloads").join(format!("{hex_part}.json"))).unwrap(),
+    )
+    .unwrap()
 }
 
 fn files_under(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -167,11 +184,23 @@ fn call_appends_model_call_event() {
     let subject = read_subject(&led, 1);
     assert_eq!(subject["provider"], "stub");
     assert_eq!(subject["outcome"], "ok");
-    assert_eq!(subject["tokens"], serde_json::json!({"prompt": 42, "completion": 7}));
-    assert_eq!(subject["window"], serde_json::json!({"budget": 8192, "actual": 49}));
-    assert!(subject["prompt_hash"].as_str().unwrap().starts_with("sha256:"));
+    assert_eq!(
+        subject["tokens"],
+        serde_json::json!({"prompt": 42, "completion": 7})
+    );
+    assert_eq!(
+        subject["window"],
+        serde_json::json!({"budget": 8192, "actual": 49})
+    );
+    assert!(subject["prompt_hash"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
     assert!(subject["cost_usd"].as_f64().unwrap() > 0.0);
-    assert!(subject.get("messages").is_none(), "raw prompt never in the subject");
+    assert!(
+        subject.get("messages").is_none(),
+        "raw prompt never in the subject"
+    );
 
     // seal carries the accumulated cost
     let seal_subject = read_subject(&led, 2);
@@ -184,12 +213,23 @@ fn missing_key_faults_before_any_request() {
     let pin = pinning(&dir);
     let led = dir.join("ledger");
     let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
-    let p = provider("http://127.0.0.1:1/v1", "stub", Some("GANTRY_TEST_UNSET_KEY"));
+    let p = provider(
+        "http://127.0.0.1:1/v1",
+        "stub",
+        Some("GANTRY_TEST_UNSET_KEY"),
+    );
     let fault = run.call(&p, &[msg("user", "hello")]).unwrap_err();
-    assert!(fault.fix.contains("GANTRY_TEST_UNSET_KEY"), "fix names the var: {fault}");
+    assert!(
+        fault.fix.contains("GANTRY_TEST_UNSET_KEY"),
+        "fix names the var: {fault}"
+    );
 
     let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
-    assert_eq!(lines.lines().count(), 1, "only run.open before any request attempt");
+    assert_eq!(
+        lines.lines().count(),
+        1,
+        "only run.open before any request attempt"
+    );
 }
 
 /// A provider error body that echoes request headers (proxies and gateways
@@ -212,7 +252,10 @@ fn provider_error_never_leaks_the_key_onto_the_ledger() {
     srv.join().unwrap();
     std::env::remove_var("GANTRY_TEST_SENTINEL_KEY");
 
-    assert!(!fault.cause.contains(sentinel), "fault cause carries the key: {fault}");
+    assert!(
+        !fault.cause.contains(sentinel),
+        "fault cause carries the key: {fault}"
+    );
 
     let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
     let call: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
@@ -226,7 +269,11 @@ fn provider_error_never_leaks_the_key_onto_the_ledger() {
     assert!(!files.is_empty());
     for f in files {
         let text = fs::read_to_string(&f).unwrap_or_default();
-        assert!(!text.contains(sentinel), "sentinel leaked into {}", f.display());
+        assert!(
+            !text.contains(sentinel),
+            "sentinel leaked into {}",
+            f.display()
+        );
     }
 }
 
@@ -237,25 +284,40 @@ fn http_500_is_a_ledger_event() {
     let (base, _srv) = stub(500, r#"{"error":"boom"}"#);
     let led = dir.join("ledger");
     let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
-    let fault = run.call(&provider(&base, "stub", None), &[msg("user", "hi")]).unwrap_err();
+    let fault = run
+        .call(&provider(&base, "stub", None), &[msg("user", "hi")])
+        .unwrap_err();
     run.seal("failed").unwrap();
     assert!(fault.cause.contains("on the ledger"), "{fault}");
-    assert!(fault.cause.contains("500"), "outer fault keeps the inner cause: {fault}");
+    assert!(
+        fault.cause.contains("500"),
+        "outer fault keeps the inner cause: {fault}"
+    );
     let subject = read_subject(&led, 1);
     assert_eq!(subject["outcome"], "error");
     assert_eq!(subject["error"]["cause"], "provider returned HTTP 500");
-    assert!(subject["error"]["body_hash"].as_str().unwrap().starts_with("sha256:"));
+    assert!(subject["error"]["body_hash"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
     assert!(!subject["error"]["fix"].as_str().unwrap().is_empty());
     assert!(gantry::ledger::verify(&led).unwrap().ok());
 
     // Error-path and ok-path subjects expose the same top-level keys.
     let (ok_base, ok_srv) = stub(200, OK_BODY);
-    let mut ok_run = GatewayRun::open(Ledger::init(&dir.join("ledger-ok")).unwrap(), "smoke", &pin).unwrap();
-    ok_run.call(&provider(&ok_base, "stub", None), &[msg("user", "hi")]).unwrap();
+    let mut ok_run =
+        GatewayRun::open(Ledger::init(&dir.join("ledger-ok")).unwrap(), "smoke", &pin).unwrap();
+    ok_run
+        .call(&provider(&ok_base, "stub", None), &[msg("user", "hi")])
+        .unwrap();
     ok_run.seal("complete").unwrap();
     ok_srv.join().unwrap();
     let ok_subject = read_subject(&dir.join("ledger-ok"), 1);
-    assert_eq!(sorted_keys(&subject), sorted_keys(&ok_subject), "error and ok subjects share a shape");
+    assert_eq!(
+        sorted_keys(&subject),
+        sorted_keys(&ok_subject),
+        "error and ok subjects share a shape"
+    );
 }
 
 #[test]
@@ -271,7 +333,10 @@ fn connection_refused_is_a_ledger_event() {
     run.seal("failed").unwrap();
     let subject = read_subject(&led, 1);
     assert_eq!(subject["outcome"], "error");
-    assert!(subject["error"]["fix"].as_str().unwrap().contains("base_url"));
+    assert!(subject["error"]["fix"]
+        .as_str()
+        .unwrap()
+        .contains("base_url"));
 }
 
 fn sorted_keys(v: &serde_json::Value) -> Vec<String> {
@@ -291,13 +356,17 @@ fn envelope_shape_identical_across_providers() {
         let (base, _srv) = stub(200, OK_BODY);
         let led = dir.join(format!("ledger-{name}"));
         let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
-        run.call(&provider(&base, name, None), &[msg("user", "hello")]).unwrap();
+        run.call(&provider(&base, name, None), &[msg("user", "hello")])
+            .unwrap();
         run.seal("complete").unwrap();
         let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
         let env: serde_json::Value = serde_json::from_str(lines.lines().nth(1).unwrap()).unwrap();
         shapes.push((sorted_keys(&env), sorted_keys(&read_subject(&led, 1))));
     }
-    assert_eq!(shapes[0], shapes[1], "same envelope keys and same subject keys");
+    assert_eq!(
+        shapes[0], shapes[1],
+        "same envelope keys and same subject keys"
+    );
 }
 
 #[test]
@@ -309,10 +378,17 @@ fn key_bytes_never_reach_the_ledger() {
     let (base, srv) = stub(200, OK_BODY);
     let led = dir.join("ledger");
     let mut run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
-    run.call(&provider(&base, "stub", Some("GANTRY_TEST_CANARY_KEY")), &[msg("user", "hello")]).unwrap();
+    run.call(
+        &provider(&base, "stub", Some("GANTRY_TEST_CANARY_KEY")),
+        &[msg("user", "hello")],
+    )
+    .unwrap();
     run.seal("complete").unwrap();
     let req = String::from_utf8(srv.join().unwrap()).unwrap();
-    assert!(req.contains(&format!("Bearer {canary}")), "wire contains Bearer token");
+    assert!(
+        req.contains(&format!("Bearer {canary}")),
+        "wire contains Bearer token"
+    );
     std::env::remove_var("GANTRY_TEST_CANARY_KEY");
 
     let mut files = Vec::new();
@@ -335,5 +411,8 @@ fn base_url_with_credential_is_rejected() {
     .unwrap();
     let fault = gantry::gateway::load_providers(&path).unwrap_err();
     assert!(fault.cause.contains("bad"), "names the provider: {fault}");
-    assert!(fault.fix.contains("key_env"), "fix points at key_env: {fault}");
+    assert!(
+        fault.fix.contains("key_env"),
+        "fix points at key_env: {fault}"
+    );
 }
