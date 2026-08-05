@@ -250,7 +250,7 @@ $ ./target/debug/gantry score /tmp/demo/ledger
 | 11 Observability | 3 | requests, decisions and results all flow through the chokepoint onto the signed ledger |
 | 12 Governance | 3 | authority-as-code produced a named denial; permission-mode divergence is recorded per event when the host exposes the mode, unobserved otherwise |
 
-**Overall level: 3** (the minimum across 5 scored primitives, not the average). Rules scoring-2, 14 events scored.
+**Overall level: 3** (the minimum across 5 scored primitives, not the average). Rules scoring-3, 15 events scored.
 ```
 
 The N/A rows are the point. Those seven layers were never exercised in this
@@ -534,20 +534,22 @@ same twelve numbers without trusting the binary.
 | 04 | Tool interface | 4 | MCP-shaped registry, taint on every result. |
 | 05 | Execution environment | 4 | Commands run inside a seatbelt sandbox, recorded per request. |
 | 06 | Durable state | 3 | A run resumed from a checkpoint: the seam is on the record. |
-| 07 | Orchestration | 3 | A rung earned promotion under a named approver. |
+| 07 | Orchestration | 4 | A human gate ran at an irreversible step: the policy held the call, and a human answered it on the record. Approve and refuse earn the same level, because a refusal is the gate working. |
 | 08 | Sub-agents | 3 | A delegated run records subagent.spawn, and the chokepoint denies an out-of-grant call with rule r-delegation. |
 | 09 | Skills | 3 | Signed packages resolved against the managed key registry or refused; resolved steps execute through the broker under the delegated grant. |
 | 10 | Verification | 4 | A sensor that could not fail was reported broken, not clean. |
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
-| 12 | Governance | 3 | Authority-as-code produced a named denial; the running permission mode is recorded per event and divergence from the tracked declaration is reported. |
+| 12 | Governance | 4 | Authority-as-code produced a named denial; the drift walk reported every profile requirement, and run open recorded what this machine could not provide. The level is the walk having run, not what it found. |
 
-**Overall level: 3.** Four layers stand at 4, and eight sit at 3, which is why
-the overall number has not moved: it is the minimum, and the minimum is the
-honest figure. Primitive 01 reached 4 when the instruction-lifecycle sensor
-started gating the pack and `docs/proof/08-run.sh` started running it. Adding
-the scoring rule alone changed nothing, because the self-audit did not exercise
-the layer, and the scorer reads telemetry. That is the whole design working:
-the number follows the record, including when the record is disappointing.
+**Overall level: 3.** Six layers stand at 4, and six sit at 3, which is why the
+overall number has not moved: it is the minimum, and the minimum is the honest
+figure. Primitive 01 reached 4 when the instruction-lifecycle sensor started
+gating the pack and `docs/proof/08-run.sh` started running it; 07 and 12
+reached 4 when the same script started holding a call for a human and walking
+the profile requirements. In all three cases adding the scoring rule alone
+changed nothing, because the self-audit did not exercise the layer, and the
+scorer reads telemetry. That is the whole design working: the number follows
+the record, including when the record is disappointing.
 
 Reproduce:
 
