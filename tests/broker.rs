@@ -35,6 +35,7 @@ fn pinning(dir: &Path) -> Pinning {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     }
 }
 
@@ -496,6 +497,7 @@ fn a_non_laptop_profile_declaring_a_published_seed_refuses_to_start() {
         instructions: dir.join("pack.md"),
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     };
     fs::write(&pin.instructions, "you are an audit agent").unwrap();
     let led = dir.join("ledger-published-seed");
@@ -556,6 +558,7 @@ fn a_profile_declaring_an_unloadable_actor_key_refuses_to_start() {
         instructions: dir.join("pack.md"),
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     };
     fs::write(&pin.instructions, "you are an audit agent").unwrap();
     let led = dir.join("ledger-unloadable");
@@ -655,6 +658,7 @@ fn template_init_generates_a_per_harness_key_and_the_harness_signs() {
         instructions: first.join("instructions/pack.md"),
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     };
     let mut run = BrokerRun::open(
         Ledger::init(&led).unwrap(),

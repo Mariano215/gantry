@@ -52,6 +52,7 @@ fn pinning(dir: &Path, policy: &Path) -> Pinning {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     }
 }
 

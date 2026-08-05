@@ -31,6 +31,7 @@ fn open_run(dir: &Path, name: &str) -> (BrokerRun, PathBuf) {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     };
     let led = dir.join(format!("ledger-{name}"));
     let mut run = BrokerRun::open(

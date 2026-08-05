@@ -391,6 +391,62 @@ indistinguishable from a use and the count would be wrong by one.
   self-audit never exercises is inert, so `docs/proof/08-run.sh` holds a
   `vcs.publish` call, approves it and walks the requirements; recorded in
   `docs/proof/19.md`
+- **A held call is visible, and the console still writes nothing.** Every call
+  whose `policy.decision` resolved to `hold` appears in the operator console's
+  inbox with the rule that held it, the message it carries, the capability, the
+  call, when it was last held, who has answered and the exact `gantry approve`
+  command that resolves it. A hold nobody can see makes the approval path
+  complete and useless, which is what `docs/proof/14.md` recorded as its first
+  remaining guide. The row's state is the broker's own predicate re-derived,
+  not the presence of an event: an approve grant, under an approver the trust
+  budget permits, that no `approval.use` has spent, so a grant the broker would
+  ignore never renders as one that releases the call, and "nobody looked" and
+  "somebody said no" are different rows with different words. The console
+  prints the command and never runs it: `gantry approve` records a named human,
+  and a button on a loopback port with no identity story would put that name on
+  the ledger because a socket was reachable. Where the profile permits any
+  approver the command carries a placeholder rather than a name the console
+  guessed. Enforced by `src/console.rs` (`approvals`), `tests/console.rs`
+  (`the_inbox_names_every_held_call_and_what_the_record_says_about_it`,
+  `a_ledger_with_no_hold_has_an_empty_inbox_rather_than_no_route`) and
+  `ci/console-render.sh`, which builds three held calls in three states and
+  asserts each state, the approver and the whole approve command in the
+  rendered DOM; proved able to fail by renaming `state`, `approve_command`,
+  `grants` and `releases_next_call` in turn, and recorded in `docs/proof/20.md`
+- **A page never shows part of a record as the whole of it.** `/api/events`
+  returns at most 1000 rows and reports how many matched; the Run view prints
+  both numbers and, when they differ, names how many events are not drawn and
+  where to page the rest. A complete-looking rendering of an incomplete read is
+  a worse failure on this product than a page that refuses to draw. The same
+  read is the oldest matching events and not the newest, because limit and
+  offset run over the log in append order, and the overview said "most recent"
+  for nine slices. The render check reaches the expanded row and the
+  verification takeover without a browser driver: a row opened by its own route
+  is not an interaction, and the takeover is what the router does before any
+  view mounts, so a second console over an altered copy of the ledger reaches
+  it. Enforced by `ci/console-render.sh`, which renders eleven pages and
+  refutes the healthy scorecard behind the takeover; proved able to fail by
+  renaming `total`, `index`, `faults` and `ok` in turn. Whether an expanded row
+  survives the five second poll is proved in `docs/proof/20.md` against
+  `dev/serve.py grow` and is not in the gate, because against the real binary
+  the same question is a race with the browser's virtual clock and a flaky gate
+  is one people learn to skip.
+  `[UNENFORCED]` `ci/console-open-row-survives-poll`
+- **Authority is built from what the caller observed, never from what the
+  process is running under.** `Pinning` carries the observed permission mode
+  and `GatewayRun::open` records that, rather than reading
+  `CLAUDE_PERMISSION_MODE` itself; one function, `observed_permission_mode`,
+  reads the variable and every other path takes it as an argument. This is the
+  seam `policy::availability_check` already draws, and the gateway was the
+  exception: because it read process-global state, the suite passed or failed
+  according to the permission mode of the shell that launched it, and
+  `cargo test` from inside a session whose mode diverges from
+  `.claude/settings.json` failed on an assertion about divergence. A gate that
+  fails for reasons invisible in the diff is one people learn to run somewhere
+  else. Enforced by `tests/gateway.rs`
+  (`the_observed_mode_reaches_the_event_from_the_pinning_and_not_the_environment`,
+  which drives a diverging mode, a matching mode and no observation at all
+  through a real run and reads the authority block off the event)
 
 ## Code standards
 

@@ -71,6 +71,21 @@ pub struct Pinning {
     /// (schema constraint: `authority.diverged`). The caller computes this;
     /// the gateway only records it.
     pub diverged: Vec<String>,
+    /// The permission mode observed on the host, `None` when nothing observed
+    /// one. The caller reads it (from `CLAUDE_PERMISSION_MODE`, which the hook
+    /// sets) and passes it in, rather than the gateway reading the environment
+    /// itself. Same seam `policy::availability_check` draws, for the same
+    /// reason: authority built partly from process-global state depends on
+    /// invisible ambient input, which made the test suite pass or fail
+    /// according to the permission mode of the shell that launched it.
+    pub permission_mode: Option<String>,
+}
+
+/// The permission mode this process can see, for a caller assembling a
+/// `Pinning`. One place reads the variable so the rest of the code takes it as
+/// an argument.
+pub fn observed_permission_mode() -> Option<String> {
+    std::env::var("CLAUDE_PERMISSION_MODE").ok()
 }
 
 /// An open run. Owning the only route to a model call is what makes the
@@ -118,10 +133,8 @@ impl Pinning {
             .settings
             .as_ref()
             .and_then(|p| std::fs::read_to_string(p).ok());
-        let (permission_mode, mode_diverged) = permission_mode_check(
-            std::env::var("CLAUDE_PERMISSION_MODE").ok().as_deref(),
-            settings_text.as_deref(),
-        );
+        let (permission_mode, mode_diverged) =
+            permission_mode_check(self.permission_mode.as_deref(), settings_text.as_deref());
         let mut diverged = self.diverged.clone();
         if mode_diverged {
             diverged.push("host_permissions.permission_mode".to_string());

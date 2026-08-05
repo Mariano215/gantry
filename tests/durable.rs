@@ -30,6 +30,7 @@ fn pin(dir: &Path) -> Pinning {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     }
 }
 

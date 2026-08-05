@@ -311,6 +311,7 @@ fn run() -> Result<i32, Fault> {
                 instructions: pack_path.into(),
                 settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
                 diverged: settings_divergence(settings_path),
+                permission_mode: gantry::gateway::observed_permission_mode(),
             };
             let system = read_file(&pack_path.display().to_string())?;
             let mut run = GatewayRun::open(ledger, "gateway-smoke", &pin)?;
@@ -525,6 +526,7 @@ fn drift_scan(ledger_dir: &str, policy_path: &str) -> Result<i32, Fault> {
         instructions: instructions.into(),
         settings: settings.map(Into::into),
         diverged,
+        permission_mode: gantry::gateway::observed_permission_mode(),
     };
     let authority = pin.authority(
         &policy.profile,
@@ -740,6 +742,7 @@ fn durable_pin() -> Pinning {
         instructions: Path::new("instructions/pack.md").into(),
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
+        permission_mode: gantry::gateway::observed_permission_mode(),
     }
 }
 
@@ -1430,6 +1433,7 @@ fn orchestrate_step(
         instructions: Path::new("instructions/pack.md").into(),
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
+        permission_mode: gantry::gateway::observed_permission_mode(),
     };
     let mut orch = Orchestrator::open(ledger, policy, &format!("orchestrate:{capability}"), &pin)?;
     let outcome = orch.step(capability, &sensor, Path::new(artifact), approver)?;
@@ -1539,6 +1543,7 @@ fn write_grant(
         instructions: Path::new("instructions/pack.md").into(),
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
+        permission_mode: gantry::gateway::observed_permission_mode(),
     };
     let policy_version = policy.policy_version.clone().ok_or_else(|| {
         Fault::new(
@@ -1647,6 +1652,7 @@ fn sensor_gate(
         instructions: Path::new("instructions/pack.md").into(),
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
+        permission_mode: gantry::gateway::observed_permission_mode(),
     };
     let mut run = SensorRun::open(
         ledger,
@@ -1733,6 +1739,7 @@ fn repair_artifact(
             instructions: Path::new("instructions/pack.md").into(),
             settings: None,
             diverged: vec![],
+            permission_mode: gantry::gateway::observed_permission_mode(),
         },
     )?;
     let answer = grun.call(provider, &[msg("system", system), msg("user", &user)])?;
@@ -1774,6 +1781,7 @@ fn open_broker_with(
         instructions: Path::new(instructions).into(),
         settings: Some(settings_path).filter(|p| p.exists()).map(Into::into),
         diverged: settings_divergence(settings_path),
+        permission_mode: gantry::gateway::observed_permission_mode(),
     };
     let mut run = BrokerRun::open(ledger, policy, workload, &pin)?;
     run.register_builtins()?;

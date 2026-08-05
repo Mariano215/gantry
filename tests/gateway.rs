@@ -22,6 +22,7 @@ fn pinning(dir: &Path) -> Pinning {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     }
 }
 
@@ -415,6 +416,7 @@ fn the_gateway_signs_under_the_key_the_pinned_profile_declares() {
         instructions: pack,
         settings: None,
         diverged: vec![],
+        permission_mode: None,
     };
 
     let led = dir.join("ledger");
@@ -463,6 +465,47 @@ fn base_url_with_credential_is_rejected() {
 /// ci/permission-mode-drift: the running permission mode is recorded when
 /// observed, compared against the tracked declaration, and written as
 /// "unobserved" rather than guessed when no signal exists.
+#[test]
+fn the_observed_mode_reaches_the_event_from_the_pinning_and_not_the_environment() {
+    // The seam this asserts: authority is built from what the caller observed,
+    // never from what the process happens to be running under. Before it was
+    // drawn, GatewayRun::open read CLAUDE_PERMISSION_MODE itself, so this
+    // suite passed or failed according to the permission mode of the shell
+    // that launched it, and a run recorded ambient state as an observation.
+    let dir = workdir("observed-mode");
+    let settings = dir.join("settings.json");
+    fs::write(&settings, r#"{"permissions": {"defaultMode": "default"}}"#).unwrap();
+
+    let mode_of = |observed: Option<&str>, name: &str| -> serde_json::Value {
+        let mut pin = pinning(&dir);
+        pin.settings = Some(settings.clone());
+        pin.permission_mode = observed.map(str::to_string);
+        let led = dir.join(name);
+        let run = GatewayRun::open(Ledger::init(&led).unwrap(), "smoke", &pin).unwrap();
+        run.seal("complete").unwrap();
+        let lines = fs::read_to_string(led.join("events.jsonl")).unwrap();
+        let open: serde_json::Value = serde_json::from_str(lines.lines().next().unwrap()).unwrap();
+        open["authority"].clone()
+    };
+
+    let diverging = mode_of(Some("bypassPermissions"), "diverging");
+    assert_eq!(diverging["permission_mode"], "bypassPermissions");
+    assert_eq!(
+        diverging["diverged"],
+        serde_json::json!(["host_permissions.permission_mode"])
+    );
+
+    let matching = mode_of(Some("default"), "matching");
+    assert_eq!(matching["permission_mode"], "default");
+    assert_eq!(matching["diverged"], serde_json::json!([]));
+
+    // Nothing observed is written down as such, and is not a divergence. This
+    // is the case the environment used to fill in behind the caller's back.
+    let unobserved = mode_of(None, "unobserved");
+    assert_eq!(unobserved["permission_mode"], "unobserved");
+    assert_eq!(unobserved["diverged"], serde_json::json!([]));
+}
+
 #[test]
 fn permission_mode_divergence_is_computed_never_guessed() {
     use gantry::gateway::permission_mode_check;

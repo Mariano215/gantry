@@ -283,6 +283,18 @@ recorded as `self_approved: true` on the `approval.use` either way. Visible
 rather than forbidden: a profile that wants separate eyes sets
 `approver: named` and leaves the agent off the list.
 
+**Approval inbox.** The console view over every call the policy held, one row
+per call hash and rule, which is the pair a grant binds to rather than the
+request the approver saw. A row reads `waiting` when no approval event names
+it, `refused` when a human recorded a deny, `released` when a usable grant sits
+on the ledger, `spent` when the grant that released it once was consumed and
+the call has been held again since, and `ineffective` when the only approve
+grant is from an approver the trust budget does not permit. The state is the
+broker's own release test re-derived, so the page never shows a grant as
+releasing a call the broker would still hold. The view is read-only like the
+rest of the console: it prints the `gantry approve` command and a human runs
+it, because an approval names a person and a loopback port names nobody.
+
 **Rule id.** Every decision names one rule, so a denial stays explicable
 afterwards. Two ids are synthesized rather than written in the rules list:
 `r-default` (no capability declares this tool) and `r-delegation` (the
