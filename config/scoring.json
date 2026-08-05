@@ -1,5 +1,5 @@
 {
-  "rules_version": "scoring-1",
+  "rules_version": "scoring-2",
   "rules": [
     {
       "primitive": 1,
@@ -22,7 +22,8 @@
       "name": "Context management",
       "base": { "kind": "model.call" },
       "levels": [
-        { "level": 2, "requires": [{ "kind": "model.call", "pointer": "/window", "present": true }], "evidence": "window budget and actual recorded per call; graph retrieval is not ledgered, so telemetry caps this at 2" }
+        { "level": 2, "requires": [{ "kind": "model.call", "pointer": "/window", "present": true }], "evidence": "window budget and actual recorded per call" },
+        { "level": 3, "requires": [{ "kind": "graph.query", "pointer": "/bytes_read", "present": true }], "evidence": "graph retrieval ledgered with its byte cost and staleness re-reads" }
       ]
     },
     {

@@ -37,6 +37,10 @@ i=1; while [ $i -le $THRESHOLD ]; do
   i=$((i + 1))
 done
 
+# Graph: a ledgered retrieval, so context management is telemetry (3).
+$BIN graph build $WORK/graph.json docs/CONCEPT.md docs/PLAN.md >/dev/null
+$BIN graph query $L $WORK/graph.json harness >/dev/null
+
 # Durable: a kill and a resume, so the seam is on the ledger (6).
 for n in 1 2 3; do echo "step $n" > $WORK/s$n.md; done
 set +e; $BIN durable run $L selfaudit 1 $WORK/s1.md $WORK/s2.md $WORK/s3.md >/dev/null 2>&1; set -e

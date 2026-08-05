@@ -43,6 +43,7 @@ const USAGE: &str = "usage:
   gantry durable resume <ledger-dir> <task-id> <file>...
   gantry durable show <ledger-dir> <task-id>
   gantry graph build <graph.json> <file>...
+  gantry graph query <ledger-dir> <graph.json> <symbol>
   gantry graph compare <graph.json> <symbol> <file>...
   gantry score <ledger-dir> [scoring.json] [console.html]
   gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
@@ -260,6 +261,9 @@ fn run() -> Result<i32, Fault> {
         ["durable", "show", ledger_dir, task_id] => durable_show(ledger_dir, task_id),
         ["graph", "build", graph_path, files @ ..] if !files.is_empty() => {
             graph_build(graph_path, files)
+        }
+        ["graph", "query", ledger_dir, graph_path, symbol] => {
+            graph_query(ledger_dir, graph_path, symbol)
         }
         ["graph", "compare", graph_path, symbol, files @ ..] if !files.is_empty() => {
             graph_compare(graph_path, symbol, files)
@@ -605,7 +609,7 @@ fn skill_resolve(ledger_dir: &str, package_dir: &str, registry: &[String]) -> Re
             }),
         ),
     };
-    append_system_event(&mut ledger, "skill.resolve", subject)?;
+    append_system_event(&mut ledger, "system:resolver", "skill.resolve", subject)?;
     match outcome {
         Ok(resolved) => {
             println!(
@@ -687,6 +691,7 @@ fn skill_delegate(parent_caps: &str, package_dir: &str) -> Result<i32, Fault> {
 /// way, for the small out-of-run records (skill resolutions, scores).
 fn append_system_event(
     ledger: &mut Ledger,
+    actor_id: &str,
     kind: &str,
     subject: serde_json::Value,
 ) -> Result<(), Fault> {
@@ -701,7 +706,7 @@ fn append_system_event(
         seq: 0,
         ts: gantry::gateway::rfc3339_now(),
         kind: kind.to_string(),
-        actor: json!({"type": "system", "id": "system:resolver", "identity_source": "local", "rung": null}),
+        actor: json!({"type": "system", "id": actor_id, "identity_source": "local", "rung": null}),
         authority,
         subject,
         redacted: vec![],
@@ -718,6 +723,41 @@ fn graph_build(graph_path: &str, files: &[&str]) -> Result<i32, Fault> {
         "graph built: {} nodes, index {} bytes, saved to {graph_path}",
         graph.nodes.len(),
         graph.index_bytes()
+    );
+    Ok(0)
+}
+
+/// A ledgered retrieval: query the graph with staleness verification on and
+/// record what it cost as a graph.query event, so context management is
+/// telemetry, not prose. This is the production path; compare below is the
+/// offline benchmark.
+fn graph_query(ledger_dir: &str, graph_path: &str, symbol: &str) -> Result<i32, Fault> {
+    let graph = Graph::load(Path::new(graph_path))?;
+    let retrieval = graph.query(symbol, true)?;
+    let dir = Path::new(ledger_dir);
+    let mut ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    append_system_event(
+        &mut ledger,
+        "system:graph",
+        "graph.query",
+        json!({
+            "graph": graph_path,
+            "symbol": symbol,
+            "hits": retrieval.hits,
+            "bytes_read": retrieval.bytes_read,
+            "index_bytes": graph.index_bytes(),
+            "stale_reread": retrieval.stale_reread,
+        }),
+    )?;
+    println!(
+        "graph query {symbol}: {} hit(s), {} bytes read, {} stale re-read; ledgered as graph.query",
+        retrieval.hits.len(),
+        retrieval.bytes_read,
+        retrieval.stale_reread.len()
     );
     Ok(0)
 }

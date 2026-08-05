@@ -49,7 +49,7 @@ would hide.
 |---|---|---|---|
 | 01 | Instruction | 3 | Instruction pack version-pinned per run; no lifecycle telemetry, so capped at 3. |
 | 02 | Context delivery | 3 | Normalised model.call events with a pinned prompt hash. |
-| 03 | Context management | 2 | Window budget and actual recorded per call. Graph retrieval is not yet ledgered, so telemetry caps this at 2. |
+| 03 | Context management | 3 | Window budget and actual recorded per call; graph retrieval ledgered as graph.query with its byte cost and staleness re-reads. |
 | 04 | Tool interface | 4 | MCP-shaped registry, taint on every result. |
 | 05 | Execution environment | 4 | Commands run inside a seatbelt sandbox, recorded per request. |
 | 06 | Durable state | 3 | A run resumed from a checkpoint: the seam is on the record. |
@@ -60,12 +60,13 @@ would hide.
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
 | 12 | Governance | 3 | Authority-as-code produced a named denial; permission-mode drift still unobserved, capping at 3. |
 
-**Overall level: 2.** The floor is primitive 03: the graph retrieval works and
-is measured (`docs/proof/07.md`), but it does not yet emit events, so the
-scorer, which reads telemetry and not prose, will not credit above 2 until it
-does. Four layers stand at 4. That gap between what the code does and what the
-telemetry proves is the point of scoring from the ledger: the number cannot be
-argued up.
+**Overall level: 3.** The former floor was primitive 03: the graph retrieval
+worked and was measured (`docs/proof/07.md`) but emitted no events, so the
+scorer, which reads telemetry and not prose, held it at 2. `gantry graph
+query` now ledgers each retrieval as a `graph.query` event carrying its byte
+cost and staleness re-reads, and the scorer credits 3 from that record. Four
+layers stand at 4. The number moved because the telemetry moved, not because
+this file did.
 
 Reproduce:
 
