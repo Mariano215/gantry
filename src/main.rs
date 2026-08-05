@@ -832,25 +832,45 @@ fn sensor_live(sensor_paths: &[&str]) -> Result<i32, Fault> {
     Ok(if broken == 0 { 0 } else { 1 })
 }
 
-/// A harness template is a bundle of policy, providers, sensors and signing
-/// keys that must validate as a whole: every part loads through the same
-/// validator the running system uses, so a template cannot ship a
-/// configuration the platform would refuse at runtime. Returns the file list
-/// for `template init` to copy.
+/// A harness template is a bundle of policy, providers, scoring rules, an
+/// instruction pack, sensors and signing keys that must validate as a whole:
+/// every part loads through the same validator the running system uses, so a
+/// template cannot ship a configuration the platform would refuse at runtime.
+/// The bundle mirrors the runtime layout (`config/`, `instructions/`) because
+/// the binary reads those paths relative to the working directory; a template
+/// that omits one produces a directory that refuses to run, which is the
+/// defect this whole-bundle check exists to catch. Returns the file list for
+/// `template init` to copy.
 fn template_validate(template_dir: &str) -> Result<Vec<std::path::PathBuf>, Fault> {
     let dir = Path::new(template_dir);
     let mut files = Vec::new();
 
-    let policy_path = dir.join("policy.json");
+    let policy_path = dir.join("config/policy.json");
     let policy = Policy::load(&policy_path)?;
     files.push(policy_path);
 
-    let providers_path = dir.join("providers.json");
+    let providers_path = dir.join("config/providers.json");
     let providers = gateway::load_providers(&providers_path)?;
     files.push(providers_path);
 
+    let scoring_path = dir.join("config/scoring.json");
+    let scoring = Scoring::load(&scoring_path)?;
+    files.push(scoring_path);
+
+    // The instruction pack is version-pinned by hash on every event, so an
+    // empty one is a run with no declared instructions, not a light one.
+    let pack_path = dir.join("instructions/pack.md");
+    let pack = read_file(pack_path.to_string_lossy().as_ref())?;
+    if pack.trim().is_empty() {
+        return Err(Fault::new(
+            format!("{} is empty", pack_path.display()),
+            "write the instruction pack this profile runs under; its hash is pinned on every event",
+        ));
+    }
+    files.push(pack_path);
+
     let mut sensor_count = 0usize;
-    let sensors_dir = dir.join("sensors");
+    let sensors_dir = dir.join("config/sensors");
     if sensors_dir.is_dir() {
         let entries = fs::read_dir(&sensors_dir).map_err(|e| {
             Fault::new(
@@ -875,7 +895,7 @@ fn template_validate(template_dir: &str) -> Result<Vec<std::path::PathBuf>, Faul
         }
     }
 
-    let keys_path = dir.join("skill-keys.json");
+    let keys_path = dir.join("config/skill-keys.json");
     let key_count = if keys_path.exists() {
         let n = gantry::skills::KeyRegistry::load(&keys_path)?.keys.len();
         files.push(keys_path);
@@ -885,11 +905,12 @@ fn template_validate(template_dir: &str) -> Result<Vec<std::path::PathBuf>, Faul
     };
 
     println!(
-        "template {template_dir} validates: profile {}, {} capabilities, {} rules, {} provider(s), {} sensor(s), {} signing key(s)",
+        "template {template_dir} validates: profile {}, {} capabilities, {} rules, {} provider(s), {} scoring rule(s), {} sensor(s), {} signing key(s)",
         policy.profile,
         policy.capabilities.len(),
         policy.rules.len(),
         providers.len(),
+        scoring.rules.len(),
         sensor_count,
         key_count
     );

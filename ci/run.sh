@@ -22,7 +22,7 @@ echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
 echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects its negative control =="
-cargo run --quiet -- sensor live templates/laptop/sensors/*.json docs/proof/fixtures/no-private-key.json
+cargo run --quiet -- sensor live templates/laptop/config/sensors/*.json docs/proof/fixtures/no-private-key.json
 
 echo "== every dependency has a note in docs/DEPENDENCIES.md =="
 deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
