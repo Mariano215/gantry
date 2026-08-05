@@ -48,6 +48,7 @@ const USAGE: &str = "usage:
   gantry graph query <ledger-dir> <graph.json> <symbol>
   gantry graph compare <graph.json> <symbol> <file>...
   gantry score <ledger-dir> [scoring.json] [console.html]
+  gantry console <ledger-dir> [127.0.0.1:port]
   gantry skill resolve <ledger-dir> <package-dir> [pubkey-hex]
   gantry skill delegate <parent-caps-csv> <package-dir>
   gantry skill run <ledger-dir> <package-dir> <parent-caps-csv>
@@ -307,6 +308,8 @@ fn run() -> Result<i32, Fault> {
         ["graph", "compare", graph_path, symbol, files @ ..] if !files.is_empty() => {
             graph_compare(graph_path, symbol, files)
         }
+        ["console", ledger_dir] => console_serve(ledger_dir, "127.0.0.1:0"),
+        ["console", ledger_dir, addr] => console_serve(ledger_dir, addr),
         ["score", ledger_dir] => score(ledger_dir, "config/scoring.json", None),
         ["score", ledger_dir, rules] => score(ledger_dir, rules, None),
         ["score", ledger_dir, rules, console] => score(ledger_dir, rules, Some(console)),
@@ -594,9 +597,42 @@ fn score(ledger_dir: &str, rules_path: &str, console: Option<&str>) -> Result<i3
     Ok(0)
 }
 
+/// Serve the console over loopback: score the ledger, render the static
+/// asset, and answer every GET with it. One process, one handler, stdlib
+/// only; re-scored per request so the page is the ledger's current state.
+/// Loopback by default; an operator exposing it further does so explicitly.
+fn console_serve(ledger_dir: &str, addr: &str) -> Result<i32, Fault> {
+    let listener = std::net::TcpListener::bind(addr).map_err(|e| {
+        Fault::new(
+            format!("cannot bind {addr}: {e}"),
+            "use 127.0.0.1:0 for an ephemeral loopback port, or free the port",
+        )
+    })?;
+    let bound = listener
+        .local_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| addr.to_string());
+    println!("console at http://{bound}/ (ctrl-c to stop)");
+    for stream in listener.incoming() {
+        let Ok(mut stream) = stream else { continue };
+        // Drain the request line; every path gets the console.
+        let mut buf = [0u8; 1024];
+        let _ = std::io::Read::read(&mut stream, &mut buf);
+        let scoring = Scoring::load(Path::new("config/scoring.json"))?;
+        let ledger = Ledger::open(Path::new(ledger_dir))?;
+        let events = ledger.events_with_subjects()?;
+        let body = console_html(&scoring.score(&events));
+        let response = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = std::io::Write::write_all(&mut stream, response.as_bytes());
+    }
+    Ok(0)
+}
+
 /// A self-contained static console. The plan's UI is static assets the binary
-/// serves; this is that asset, generated from the snapshot. Serving it is a
-/// thin future add.
+/// serves; this is that asset, generated from the snapshot.
 fn console_html(snapshot: &gantry::scorer::ScoreSnapshot) -> String {
     let overall = snapshot
         .overall
