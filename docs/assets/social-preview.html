@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    background: #080d16;
+    background-image:
+      radial-gradient(ellipse 760px 520px at 78% 46%, rgba(0, 107, 219, .26), transparent 68%),
+      linear-gradient(rgba(41, 64, 103, .30) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(41, 64, 103, .30) 1px, transparent 1px);
+    background-size: auto, 40px 40px, 40px 40px;
+    color: #e3e9f4;
+    font-family: system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    display: grid;
+    grid-template-columns: 1fr 520px;
+    align-items: center;
+    gap: 36px;
+    padding: 0 62px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* A vignette that darkens the plate edges without washing the mark out. */
+  body::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 1100px 700px at 50% 50%, transparent 55%, rgba(8, 13, 22, .85));
+    pointer-events: none;
+  }
+  .copy { position: relative; z-index: 2; }
+  h1 {
+    font-size: 96px;
+    font-weight: 650;
+    letter-spacing: -.038em;
+    line-height: 1;
+    color: #ffffff;
+  }
+  .rule { width: 92px; height: 3px; background: #3b90ff; margin: 28px 0 26px; }
+  p {
+    font-size: 27px;
+    line-height: 1.44;
+    color: #bccbe1;
+    max-width: 620px;
+    letter-spacing: -.006em;
+  }
+  .meta {
+    margin-top: 42px;
+    display: flex;
+    gap: 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 15px;
+    color: #9fb0c9;
+  }
+  .meta span {
+    border: 1px solid #294067;
+    background: rgba(16, 26, 43, .8);
+    border-radius: 3px;
+    padding: 7px 13px;
+  }
+  /* logo.png carries the mark above its own "Gantry" wordmark. The heading
+     already says the name, so the window crops to the mark alone. */
+  .mark {
+    position: relative; z-index: 2;
+    justify-self: center;
+    width: 480px; height: 274px;
+    overflow: hidden;
+    transform: scale(1.06);
+    filter: brightness(1.5) saturate(1.1)
+            drop-shadow(0 0 46px rgba(0, 107, 219, .55));
+  }
+  .mark img { width: 480px; display: block; }
+</style>
+<div class="copy">
+  <h1>Gantry</h1>
+  <div class="rule"></div>
+  <p>The control plane between AI agents and everything they can touch.
+     Every call on an append-only log a third party verifies offline.</p>
+  <div class="meta">
+    <span>one static binary</span>
+    <span>air-gapped</span>
+    <span>scores itself</span>
+  </div>
+</div>
+<div class="mark"><img src="file:///Volumes/T7/Projects/gantry/docs/assets/logo.png" alt=""></div>
