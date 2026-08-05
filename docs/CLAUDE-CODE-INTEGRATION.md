@@ -40,14 +40,33 @@ differentiator.
 Nobody installs a control plane. They will run a scan on their own repo and
 argue with the score.
 
-| Command | What it does |
-|---|---|
-| `gantry scan` | Reads what is already there — instruction files, hooks, test gates, declared permissions, MCP config, CI — and scores twelve primitives with a file path or an explicit "looked in X and Y, found nothing" behind every number. Read-only, sixty seconds, no account. This is the artifact people post. |
-| `gantry apply` | Scaffolds missing layers as a reviewable diff, never a silent write. Ranked by the rubric's remediation order, so the first offer has the largest expected gain. |
-| `gantry up` | Brings up ledger, broker and sandbox on the `laptop` profile. The scan stops being a snapshot and becomes live telemetry. |
-| `gantry verify` | Checks the ledger offline and re-runs the published scoring rules against it. Anyone can run this against an exported ledger they were handed. |
+| Command | State | What it does |
+|---|---|---|
+| `gantry scan <repo-dir>` | Built, slice 16 | Reads what is already there: instruction files, hooks, test gates, declared permissions, MCP config, CI. Scores twelve primitives with a file path or an explicit "looked in X and Y, found nothing" behind every number, and lists the `[UNENFORCED]` markers the repository's own rule file carries. Read-only, offline, no account. See `docs/proof/16.md`. |
+| `gantry apply` | Not built | Would scaffold missing layers as a reviewable diff, never a silent write, ranked by the rubric's remediation order. No subcommand exists. |
+| `gantry up` | Not built | Would bring up ledger, broker and sandbox on the `laptop` profile, so the scan stops being a snapshot and becomes live telemetry. No subcommand exists. The pieces run today as separate commands (`gantry broker`, `gantry console`, `gantry score`); nothing composes them. |
+| `gantry ledger verify` | Built, slice 01 | Checks the ledger offline. `gantry score <ledger-dir>` re-runs the published scoring rules against it. Anyone can run both against an exported ledger they were handed. |
 
-`gantry scan` is the growth engine, not `gantry up`. Design it first.
+`gantry scan` is the growth engine, not `gantry up`. It was built first.
+
+### What the scan's number means, and what it does not
+
+The scan reads files, so it measures the presence of a control, never the
+control running. It resolves three states per primitive: absent (0), an
+artifact with nothing enforcing it (2), and an artifact a check file names (3).
+It awards no 1, because a habit with no artifact leaves nothing in a tree to
+read; no 4 or 5, because `docs/PRIMITIVES.md` anchor 4 is enforcement by the
+system rather than by discipline, and a file only says a check is wired; and no
+N/A, because a tree does not show which primitives the workload exercises.
+
+`gantry score` is the other number and it reads a ledger. Every predicate in
+`config/scoring.json` is a statement about events that happened, which is why
+it is the only one of the two that can award 4. The two are not averaged. The
+static scan under-reads a running system, since a recorder is runtime state and
+primitive 11 can read 0 on disk while telemetry reads 3, and it can over-read a
+dead one, since a check file naming a check says the check is wired and not
+that it works. Where they disagree, the telemetry number measured something
+running.
 
 ## Build Gantry under Gantry
 
