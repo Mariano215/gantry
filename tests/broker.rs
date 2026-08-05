@@ -467,6 +467,73 @@ fn altering_a_signed_event_is_reported_as_alteration() {
     );
 }
 
+/// The laptop fixture seed is tracked in this repository, so a signature under
+/// it proves which run wrote an event and never who operated it. A `team` or
+/// `regulated` attestation is read as attribution, so a non-laptop profile
+/// declaring that key refuses to start rather than producing signatures that
+/// read like attribution and are not.
+#[test]
+fn a_non_laptop_profile_declaring_a_published_seed_refuses_to_start() {
+    let dir = workdir("attested-published-seed");
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(repo_path("config/policy.json")).unwrap())
+            .unwrap();
+    doc["profile"] = json!("regulated");
+    let policy_path = dir.join("policy.json");
+    fs::write(&policy_path, serde_json::to_string(&doc).unwrap()).unwrap();
+    // The seed and the registry travel with the policy directory, so this run
+    // can load the declared key and read what the registry says about it.
+    for file in ["actor-key-fixture.seed", "actor-keys.json"] {
+        fs::copy(repo_path(&format!("config/{file}")), dir.join(file)).unwrap();
+    }
+
+    let pin = Pinning {
+        policy: policy_path.clone(),
+        instructions: dir.join("pack.md"),
+        settings: None,
+        diverged: vec![],
+    };
+    fs::write(&pin.instructions, "you are an audit agent").unwrap();
+    let led = dir.join("ledger-published-seed");
+    let fault = BrokerRun::open(
+        Ledger::init(&led).unwrap(),
+        Policy::load(&policy_path).unwrap(),
+        "broker-test",
+        &pin,
+    )
+    .map(|_| ())
+    .unwrap_err();
+    assert!(
+        fault.cause.contains("regulated") && fault.cause.contains("published"),
+        "the refusal names the profile and the reason: {fault}"
+    );
+    assert!(
+        fault.fix.contains("seed_published"),
+        "the fix names the registry field to change: {fault}"
+    );
+    assert!(
+        !led.join("events.jsonl").exists()
+            || fs::read_to_string(led.join("events.jsonl"))
+                .unwrap()
+                .trim()
+                .is_empty(),
+        "a refused run appends nothing"
+    );
+
+    // The same declaration on the laptop profile is accepted, so the refusal
+    // is about the profile and not about the key being unusable.
+    doc["profile"] = json!("laptop");
+    fs::write(&policy_path, serde_json::to_string(&doc).unwrap()).unwrap();
+    BrokerRun::open(
+        Ledger::init(&dir.join("ledger-laptop-seed")).unwrap(),
+        Policy::load(&policy_path).unwrap(),
+        "broker-test",
+        &pin,
+    )
+    .map(|_| ())
+    .expect("the laptop profile may sign under the published fixture seed");
+}
+
 /// A profile that declares an actor key it cannot load refuses to start.
 /// Appending unsigned under a profile that says it signs is the silent
 /// degradation this refusal exists to prevent.

@@ -152,7 +152,15 @@ work item, and `gantry scan` on this repo is expected to report it.
   `altering_a_signed_event_is_reported_as_alteration`,
   `a_profile_declaring_an_unloadable_actor_key_refuses_to_start`) and
   `tests/gateway.rs`
-  (`the_gateway_signs_under_the_key_the_pinned_profile_declares`)
+  (`the_gateway_signs_under_the_key_the_pinned_profile_declares`). A published
+  seed is refused outside the laptop profile: the laptop fixture key is
+  tracked in this repository, so a signature under it proves which run wrote
+  an event and never who operated it, which is all a laptop claims and is not
+  what a `team` or `regulated` attestation is read as. `ActorSigner::declared`
+  reads `seed_published` from the actor key registry beside the policy and
+  refuses any non-laptop profile that declares such a key, before the run
+  appends anything. — enforced by `src/runlog.rs` and `tests/broker.rs`
+  (`a_non_laptop_profile_declaring_a_published_seed_refuses_to_start`)
 
 ## Code standards
 

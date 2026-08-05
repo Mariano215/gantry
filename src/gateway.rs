@@ -162,15 +162,17 @@ pub fn permission_mode_check(
     }
 }
 
-/// The `profile_requirements` block of the pinned policy, read straight from
-/// the tracked file. A policy that is not JSON declares nothing, which is the
-/// unsigned path a run has always taken; the pinned hash still records which
-/// file it was.
-fn pinned_requirements(policy: &Path) -> Value {
+/// The pinned policy document, read straight from the tracked file. A policy
+/// that is not JSON declares nothing, which is the unsigned path a run has
+/// always taken; the pinned hash still records which file it was. The profile
+/// is read from here rather than assumed, because the profile decides what an
+/// attestation under a published seed is worth, and a gateway that named the
+/// profile itself would be the "profiles never lie" invariant failing at the
+/// producer.
+fn pinned_policy(policy: &Path) -> Value {
     std::fs::read_to_string(policy)
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .map(|v| v["profile_requirements"].clone())
         .unwrap_or(Value::Null)
 }
 
@@ -182,7 +184,9 @@ pub fn policy_dir(policy: &Path) -> &Path {
 impl GatewayRun {
     pub fn open(ledger: Ledger, workload: &str, pin: &Pinning) -> Result<GatewayRun, Fault> {
         let policy_version = file_hash(&pin.policy)?;
-        let authority = pin.authority("laptop", &policy_version)?;
+        let pinned = pinned_policy(&pin.policy);
+        let profile = pinned["profile"].as_str().unwrap_or("laptop");
+        let authority = pin.authority(profile, &policy_version)?;
         let actor = json!({
             "type": "agent",
             "id": "agent:gantry-run",
@@ -191,8 +195,11 @@ impl GatewayRun {
         });
         let instruction_pack = authority["instruction_version"].clone();
         let settings_hash = authority["settings_hash"].clone();
-        let signer =
-            ActorSigner::declared(&pinned_requirements(&pin.policy), policy_dir(&pin.policy))?;
+        let signer = ActorSigner::declared(
+            profile,
+            &pinned["profile_requirements"],
+            policy_dir(&pin.policy),
+        )?;
         let mut run = GatewayRun {
             core: RunCore::open(ledger, actor, authority).signed_by(signer),
             cost_total_usd: 0.0,
@@ -200,7 +207,7 @@ impl GatewayRun {
         run.core.append(
             "run.open",
             json!({
-                "profile": "laptop",
+                "profile": profile,
                 "workload": workload,
                 "instruction_pack": instruction_pack,
                 "settings_hash": settings_hash,

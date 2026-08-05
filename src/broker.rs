@@ -142,6 +142,7 @@ impl BrokerRun {
         // appended: a declared key that will not load refuses the run here,
         // rather than the run continuing unsigned.
         let signer = ActorSigner::declared(
+            &policy.profile,
             &policy.profile_requirements,
             gateway::policy_dir(&pin.policy),
         )?;

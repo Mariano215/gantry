@@ -259,6 +259,15 @@ defaults come from the profile and stay overridable per capability.
 | `rung_default` | `autonomous` | `assisted` | `assisted` |
 | `promotion.approver` | `any` | `any` | **`named`** |
 | `on_unavailable` | `degrade` | `degrade` | **`refuse`** |
+| `attestation` key seed | published key permitted | held key only | held key only |
+
+The attestation row is enforced at run open rather than at load, because it
+needs the key registry beside the policy: a profile other than `laptop` that
+declares an actor key the registry marks `seed_published` refuses to start.
+The laptop fixture seed is tracked in the repository, so a signature under it
+says which run wrote an event and nothing about who operated it. That is what
+a laptop claims and it is not what a `team` or `regulated` attestation is read
+as.
 
 Two rows carry the weight. `on_unavailable: refuse` is why `regulated` does not
 quietly become `laptop` when the HSM is missing: the control plane fails to

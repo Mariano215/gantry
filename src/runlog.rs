@@ -31,6 +31,23 @@ pub struct ActorSigner {
     key_id: String,
 }
 
+/// Whether the registry beside the policy marks this key's seed published.
+/// An absent or unloadable registry answers no, and that is not a hole: a run
+/// signing under a key no registry lists verifies as unverified rather than as
+/// a pass, so the failure is already visible in the report. What this guards
+/// is the case the registry does describe, where the declaration and the
+/// profile contradict each other.
+fn seed_is_published(seed_dir: &Path, key_id: &str) -> bool {
+    crate::skills::KeyRegistry::load(&seed_dir.join("actor-keys.json"))
+        .map(|registry| {
+            registry.published_seed_hexes().iter().any(|hex| {
+                crate::skills::parse_vk(hex)
+                    .is_some_and(|vk| crate::skills::key_id_for(&vk) == key_id)
+            })
+        })
+        .unwrap_or(false)
+}
+
 impl ActorSigner {
     /// Resolves `profile_requirements.attestation`. `Ok(None)` means the
     /// profile declares no actor key and the run appends unsigned, which
@@ -43,7 +60,21 @@ impl ActorSigner {
     /// `seed_dir` is the directory holding the policy file, which is what a
     /// relative `seed_file` resolves against, so the declaration travels with
     /// the harness directory rather than with the caller's working directory.
-    pub fn declared(requirements: &Value, seed_dir: &Path) -> Result<Option<ActorSigner>, Fault> {
+    /// It is also where the actor key registry is read from, because the
+    /// registry is the document that says which keys are held and which are
+    /// published.
+    ///
+    /// `profile` decides what a published seed is worth. A laptop profile may
+    /// sign under the tracked fixture key: the signature proves which run
+    /// wrote an event, which is all a laptop claims. Any other profile that
+    /// declares a published-seed key is refused, because a `team` or
+    /// `regulated` attestation is read as attribution and a key anyone holding
+    /// the repository can use attributes nothing.
+    pub fn declared(
+        profile: &str,
+        requirements: &Value,
+        seed_dir: &Path,
+    ) -> Result<Option<ActorSigner>, Fault> {
         let block = &requirements["attestation"];
         let declared = block["declared"].as_str().unwrap_or("none");
         if block.is_null() || declared == "none" {
@@ -102,6 +133,14 @@ impl ActorSigner {
                     "profile declares actor key {claimed} but the seed produces {key_id}"
                 ),
                 format!("set profile_requirements.attestation.key_id to {key_id} and register the public key in config/actor-keys.json, or point the seed source at the declared key"),
+            ));
+        }
+        if profile != "laptop" && seed_is_published(seed_dir, &key_id) {
+            return Err(Fault::new(
+                format!(
+                    "profile {profile} declares actor key {key_id}, whose seed the key registry marks published"
+                ),
+                "generate a key this deployment holds (head -c 32 /dev/urandom | xxd -p -c 32), register it in actor-keys.json without seed_published, and point profile_requirements.attestation at it; only the laptop profile may sign under a published seed",
             ));
         }
         Ok(Some(ActorSigner { key, key_id }))
