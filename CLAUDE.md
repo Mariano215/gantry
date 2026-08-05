@@ -54,8 +54,18 @@ work item, and `gantry scan` on this repo is expected to report it.
   and deny lists, and nothing reported it. See `docs/proof/00.md` finding (a).
   Partially mechanised in slice 02: settings-file drift against HEAD is
   computed per run and recorded in `authority.diverged` on every event
-  (`docs/proof/02.md` attack 5). The permission mode itself is still
-  unobserved. — `[UNENFORCED]` `ci/permission-mode-drift`
+  (`docs/proof/02.md` attack 5). Since the post-nine gap work the running
+  permission mode is recorded too: `authority.permission_mode` carries the
+  observed mode (from CLAUDE_PERMISSION_MODE, set by the hook or wrapper
+  invoking gantry), compared against the tracked
+  `permissions.defaultMode`; a mismatch lands in `authority.diverged` as
+  `host_permissions.permission_mode`, and no signal is written as
+  `unobserved`, never guessed. — enforced by
+  `gateway::permission_mode_check` and `tests/gateway.rs`
+  (`permission_mode_divergence_is_computed_never_guessed`). The remaining
+  gap: no hook sets the variable automatically yet, so an unwrapped session
+  records `unobserved` rather than the mode. — `[UNENFORCED]`
+  `ci/permission-mode-hook`
 - **A denial names its rule.** Every denied call resolves to a rule id in
   `docs/POLICY-SCHEMA.md`, so a denial short-circuited by the host permission
   list is still explicable afterwards. — enforced since slice 03 by the

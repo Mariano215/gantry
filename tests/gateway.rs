@@ -416,3 +416,41 @@ fn base_url_with_credential_is_rejected() {
         "fix points at key_env: {fault}"
     );
 }
+
+/// ci/permission-mode-drift: the running permission mode is recorded when
+/// observed, compared against the tracked declaration, and written as
+/// "unobserved" rather than guessed when no signal exists.
+#[test]
+fn permission_mode_divergence_is_computed_never_guessed() {
+    use gantry::gateway::permission_mode_check;
+    let declared_ask = r#"{"permissions": {"defaultMode": "acceptEdits"}}"#;
+
+    // Observed and matching: recorded, no divergence.
+    assert_eq!(
+        permission_mode_check(Some("acceptEdits"), Some(declared_ask)),
+        ("acceptEdits".to_string(), false)
+    );
+    // Observed and diverging: the slice 00 finding, now visible per event.
+    assert_eq!(
+        permission_mode_check(Some("bypassPermissions"), Some(declared_ask)),
+        ("bypassPermissions".to_string(), true)
+    );
+    // No declaration in settings means the host default, "default".
+    assert_eq!(
+        permission_mode_check(Some("bypassPermissions"), Some(r#"{"permissions": {}}"#)),
+        ("bypassPermissions".to_string(), true)
+    );
+    assert_eq!(
+        permission_mode_check(Some("default"), Some(r#"{"permissions": {}}"#)),
+        ("default".to_string(), false)
+    );
+    // Unobserved: written down as such, never treated as diverged or clean.
+    assert_eq!(
+        permission_mode_check(None, Some(declared_ask)),
+        ("unobserved".to_string(), false)
+    );
+    assert_eq!(
+        permission_mode_check(Some("  "), None),
+        ("unobserved".to_string(), false)
+    );
+}

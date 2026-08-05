@@ -4,103 +4,296 @@
     {
       "primitive": 1,
       "name": "Instruction",
-      "base": { "kind": "run.open" },
+      "base": {
+        "kind": "run.open"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "run.open", "pointer": "/instruction_pack", "present": true }], "evidence": "instruction pack version-pinned on every run.open; no lifecycle telemetry, so capped at 3" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "run.open",
+              "pointer": "/instruction_pack",
+              "present": true
+            }
+          ],
+          "evidence": "instruction pack version-pinned on every run.open; no lifecycle telemetry, so capped at 3"
+        }
       ]
     },
     {
       "primitive": 2,
       "name": "Context delivery",
-      "base": { "kind": "model.call" },
+      "base": {
+        "kind": "model.call"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "model.call", "pointer": "/prompt_hash", "present": true }], "evidence": "normalised model.call events with a pinned prompt hash" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "model.call",
+              "pointer": "/prompt_hash",
+              "present": true
+            }
+          ],
+          "evidence": "normalised model.call events with a pinned prompt hash"
+        }
       ]
     },
     {
       "primitive": 3,
       "name": "Context management",
-      "base": { "kind": "model.call" },
+      "base": {
+        "kind": "model.call"
+      },
       "levels": [
-        { "level": 2, "requires": [{ "kind": "model.call", "pointer": "/window", "present": true }], "evidence": "window budget and actual recorded per call" },
-        { "level": 3, "requires": [{ "kind": "graph.query", "pointer": "/bytes_read", "present": true }], "evidence": "graph retrieval ledgered with its byte cost and staleness re-reads" }
+        {
+          "level": 2,
+          "requires": [
+            {
+              "kind": "model.call",
+              "pointer": "/window",
+              "present": true
+            }
+          ],
+          "evidence": "window budget and actual recorded per call"
+        },
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "graph.query",
+              "pointer": "/bytes_read",
+              "present": true
+            }
+          ],
+          "evidence": "graph retrieval ledgered with its byte cost and staleness re-reads"
+        }
       ]
     },
     {
       "primitive": 4,
       "name": "Tool interface",
-      "base": { "kind": "tool.request" },
+      "base": {
+        "kind": "tool.request"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "tool.register" }], "evidence": "MCP-shaped registry emits register verdicts" },
-        { "level": 4, "requires": [{ "kind": "tool.result", "pointer": "/taint", "equals": true }], "evidence": "tool results carry taint" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "tool.register"
+            }
+          ],
+          "evidence": "MCP-shaped registry emits register verdicts"
+        },
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "tool.result",
+              "pointer": "/taint",
+              "equals": true
+            }
+          ],
+          "evidence": "tool results carry taint"
+        }
       ]
     },
     {
       "primitive": 5,
       "name": "Execution environment",
-      "base": { "kind": "tool.request" },
+      "base": {
+        "kind": "tool.request"
+      },
       "levels": [
-        { "level": 4, "requires": [{ "kind": "tool.request", "pointer": "/sandbox", "equals": "seatbelt" }], "evidence": "commands run inside a seatbelt sandbox, recorded per request" }
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "tool.request",
+              "pointer": "/sandbox",
+              "equals": "seatbelt"
+            }
+          ],
+          "evidence": "commands run inside a seatbelt sandbox, recorded per request"
+        }
       ]
     },
     {
       "primitive": 6,
       "name": "Durable state",
-      "base": { "kind": "state.checkpoint" },
+      "base": {
+        "kind": "state.checkpoint"
+      },
       "levels": [
-        { "level": 2, "requires": [{ "kind": "state.checkpoint" }], "evidence": "checkpoints on the ledger" },
-        { "level": 3, "requires": [{ "kind": "run.open", "pointer": "/restored_checkpoint", "present": true }], "evidence": "a run resumed from a checkpoint: the seam is on the record" }
+        {
+          "level": 2,
+          "requires": [
+            {
+              "kind": "state.checkpoint"
+            }
+          ],
+          "evidence": "checkpoints on the ledger"
+        },
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "run.open",
+              "pointer": "/restored_checkpoint",
+              "present": true
+            }
+          ],
+          "evidence": "a run resumed from a checkpoint: the seam is on the record"
+        }
       ]
     },
     {
       "primitive": 7,
       "name": "Orchestration",
-      "base": { "kind": "capability.run" },
+      "base": {
+        "kind": "capability.run"
+      },
       "levels": [
-        { "level": 2, "requires": [{ "kind": "capability.run" }], "evidence": "capability runs recorded" },
-        { "level": 3, "requires": [{ "kind": "rung.change", "pointer": "/approver", "present": true }], "evidence": "a rung earned promotion under a named approver" }
+        {
+          "level": 2,
+          "requires": [
+            {
+              "kind": "capability.run"
+            }
+          ],
+          "evidence": "capability runs recorded"
+        },
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "rung.change",
+              "pointer": "/approver",
+              "present": true
+            }
+          ],
+          "evidence": "a rung earned promotion under a named approver"
+        }
       ]
     },
     {
       "primitive": 8,
       "name": "Sub-agents",
-      "base": { "kind": "subagent.spawn" },
+      "base": {
+        "kind": "subagent.spawn"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "subagent.spawn" }], "evidence": "sub-agents with narrowed scope" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "subagent.spawn"
+            }
+          ],
+          "evidence": "sub-agents with narrowed scope"
+        }
       ]
     },
     {
       "primitive": 9,
       "name": "Skills",
-      "base": { "kind": "skill.resolve" },
+      "base": {
+        "kind": "skill.resolve"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "skill.resolve" }], "evidence": "signed skill resolution" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "skill.resolve"
+            }
+          ],
+          "evidence": "signed skill resolution"
+        }
       ]
     },
     {
       "primitive": 10,
       "name": "Verification",
-      "base": { "kind": "sensor.verdict" },
+      "base": {
+        "kind": "sensor.verdict"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "sensor.verdict" }], "evidence": "sensor verdicts on the ledger" },
-        { "level": 4, "requires": [{ "kind": "sensor.verdict", "pointer": "/verdict", "equals": "broken" }], "evidence": "a sensor that could not fail was reported broken, not clean" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "sensor.verdict"
+            }
+          ],
+          "evidence": "sensor verdicts on the ledger"
+        },
+        {
+          "level": 4,
+          "requires": [
+            {
+              "kind": "sensor.verdict",
+              "pointer": "/verdict",
+              "equals": "broken"
+            }
+          ],
+          "evidence": "a sensor that could not fail was reported broken, not clean"
+        }
       ]
     },
     {
       "primitive": 11,
       "name": "Observability",
-      "base": { "kind": "tool.request" },
+      "base": {
+        "kind": "tool.request"
+      },
       "levels": [
-        { "level": 3, "requires": [{ "kind": "tool.result" }, { "kind": "policy.decision" }], "evidence": "requests, decisions and results all flow through the chokepoint onto the signed ledger" }
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "tool.result"
+            },
+            {
+              "kind": "policy.decision"
+            }
+          ],
+          "evidence": "requests, decisions and results all flow through the chokepoint onto the signed ledger"
+        }
       ]
     },
     {
       "primitive": 12,
       "name": "Governance",
-      "base": { "kind": "policy.decision" },
+      "base": {
+        "kind": "policy.decision"
+      },
       "levels": [
-        { "level": 2, "requires": [{ "kind": "policy.decision", "pointer": "/rule", "present": true }], "evidence": "every decision names its rule" },
-        { "level": 3, "requires": [{ "kind": "policy.decision", "pointer": "/verdict", "equals": "deny" }], "evidence": "authority-as-code produced a named denial; permission-mode drift still unobserved, capping at 3" }
+        {
+          "level": 2,
+          "requires": [
+            {
+              "kind": "policy.decision",
+              "pointer": "/rule",
+              "present": true
+            }
+          ],
+          "evidence": "every decision names its rule"
+        },
+        {
+          "level": 3,
+          "requires": [
+            {
+              "kind": "policy.decision",
+              "pointer": "/verdict",
+              "equals": "deny"
+            }
+          ],
+          "evidence": "authority-as-code produced a named denial; permission-mode divergence is recorded per event when the host exposes the mode, unobserved otherwise"
+        }
       ]
     }
   ]

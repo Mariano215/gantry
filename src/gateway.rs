@@ -114,13 +114,55 @@ impl Pinning {
             Some(p) => Value::String(file_hash(p)?),
             None => Value::Null,
         };
+        let settings_text = self
+            .settings
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok());
+        let (permission_mode, mode_diverged) = permission_mode_check(
+            std::env::var("CLAUDE_PERMISSION_MODE").ok().as_deref(),
+            settings_text.as_deref(),
+        );
+        let mut diverged = self.diverged.clone();
+        if mode_diverged {
+            diverged.push("host_permissions.permission_mode".to_string());
+        }
         Ok(json!({
             "profile": profile,
             "policy_version": policy_version,
             "instruction_version": file_hash(&self.instructions)?,
             "settings_hash": settings_hash,
-            "diverged": self.diverged.clone(),
+            "permission_mode": permission_mode,
+            "diverged": diverged,
         }))
+    }
+}
+
+/// The observed permission mode against the tracked declaration
+/// (`permissions.defaultMode` in the settings file; absent means
+/// "default"). Returns the value to record and whether it diverges. An
+/// unobserved mode records "unobserved" and does not diverge: the absence
+/// of a signal is written down, never guessed into a value. The observer is
+/// the CLAUDE_PERMISSION_MODE environment variable, set by whatever hook or
+/// wrapper invokes gantry inside a session.
+pub fn permission_mode_check(
+    observed: Option<&str>,
+    settings_text: Option<&str>,
+) -> (String, bool) {
+    let declared = settings_text
+        .and_then(|t| serde_json::from_str::<Value>(t).ok())
+        .and_then(|v| {
+            v["permissions"]["defaultMode"]
+                .as_str()
+                .map(String::from)
+        })
+        .unwrap_or_else(|| "default".to_string());
+    match observed {
+        Some(mode) if !mode.trim().is_empty() => {
+            let mode = mode.trim().to_string();
+            let diverged = mode != declared;
+            (mode, diverged)
+        }
+        _ => ("unobserved".to_string(), false),
     }
 }
 

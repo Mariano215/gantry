@@ -58,7 +58,7 @@ would hide.
 | 09 | Skills | 3 | Signed skill packages resolved against the managed key registry or refused, never titled; resolved steps execute through the broker under the delegated grant. |
 | 10 | Verification | 4 | A sensor that could not fail was reported broken, not clean. |
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
-| 12 | Governance | 3 | Authority-as-code produced a named denial; permission-mode drift still unobserved, capping at 3. |
+| 12 | Governance | 3 | Authority-as-code produced a named denial; the running permission mode is recorded per event and a divergence from the tracked declaration lands in authority.diverged. |
 
 **Overall level: 3.** The former floor was primitive 03: the graph retrieval
 worked and was measured (`docs/proof/07.md`) but emitted no events, so the

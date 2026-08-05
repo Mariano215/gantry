@@ -52,6 +52,7 @@ travels next to it, keyed by `subject_hash`.
     "policy_version": "sha256:...",
     "instruction_version": "sha256:...",
     "settings_hash": "sha256:...",
+    "permission_mode": "default | acceptEdits | bypassPermissions | ... | unobserved",
     "diverged": ["host_permissions.permission_mode"]
   },
   "subject_hash": "sha256:...",
