@@ -452,13 +452,16 @@ fn open_ledger(ledger_dir: &str) -> Result<Ledger, ApiError> {
 
 /// The registered actor keys. A corrupt registry refuses whole, so a partial
 /// trust root can never turn "unchecked" into "clean" on a rendered page.
-fn actor_keys() -> Result<Vec<String>, ApiError> {
+/// Returns the registered keys and, separately, those whose seed is
+/// published. The split is what lets a rendered page distinguish a signature
+/// anyone could have produced from one only the key holder could.
+fn actor_keys() -> Result<(Vec<String>, Vec<String>), ApiError> {
     let path = Path::new(ACTOR_KEYS_PATH);
     if !path.exists() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
     crate::skills::KeyRegistry::load(path)
-        .map(|registry| registry.key_hexes())
+        .map(|registry| (registry.key_hexes(), registry.published_seed_hexes()))
         .map_err(read_failure)
 }
 
@@ -467,12 +470,18 @@ fn actor_keys() -> Result<Vec<String>, ApiError> {
 /// verifier uses, so the API and `gantry ledger verify` cannot disagree about
 /// whether a signature is good.
 fn annotated_events(ledger: &Ledger) -> Result<Vec<Value>, ApiError> {
-    let keys = ActorKeys::parse(&actor_keys()?);
+    let (registered, published) = actor_keys()?;
+    let keys = ActorKeys::parse_with_published(&registered, &published);
     let mut events = ledger.events_with_subjects().map_err(read_failure)?;
     // Both sequences come from the same envelope vector, so the zip is
     // positional and total.
     for (event, envelope) in events.iter_mut().zip(ledger.envelopes()) {
         event["_attestation_state"] = json!(keys.state_of(envelope).as_str());
+        // What a verified signature is worth. `fixture` means the seed is
+        // published, so the signature proves which run wrote the event and
+        // not who operated it. A page that renders this the same as
+        // `registered` is claiming attribution the record does not carry.
+        event["_attestation_trust"] = json!(keys.trust_of(envelope));
     }
     Ok(events)
 }
@@ -812,7 +821,9 @@ fn trust(ledger_dir: &str) -> Result<Value, ApiError> {
 
 fn verify(ledger_dir: &str) -> Result<Value, ApiError> {
     let dir = Path::new(ledger_dir);
-    let report = ledger::verify_with_actor_keys(dir, &actor_keys()?).map_err(read_failure)?;
+    let (registered, published) = actor_keys()?;
+    let report = ledger::verify_with_actor_keys_and_published(dir, &registered, &published)
+        .map_err(read_failure)?;
     // A ledger broken enough that it will not open still gets a verdict: the
     // verifier reads the files, and a head this cannot read is reported as
     // null rather than turning the route that names the damage into a 500.
@@ -843,6 +854,10 @@ fn verify(ledger_dir: &str) -> Result<Value, ApiError> {
         "entries": report.entries,
         "attestations_verified": report.attestations_verified,
         "attestations_unverified": report.attestations_unverified,
+        // Of those verified, how many were signed under a published seed.
+        // The console must qualify its count with this or it presents a
+        // laptop fixture signature as attribution.
+        "attestations_under_published_seed": report.attestations_under_published_seed,
         "faults": faults,
         "head": head,
         // The exact offline command that reaches the same verdict without

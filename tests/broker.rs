@@ -390,6 +390,47 @@ fn a_real_run_is_signed_and_verifies_against_the_tracked_registry() {
     );
 }
 
+/// The laptop key's seed is tracked in this repository, so anyone holding the
+/// checkout can produce a signature that verifies. That is acceptable for a
+/// laptop profile and unacceptable to report as attribution, so the verifier
+/// counts those separately. Without this the line a laptop run prints is
+/// byte-identical to the line an HSM-backed deployment prints.
+#[test]
+fn a_verified_attestation_under_a_published_seed_is_counted_apart() {
+    let dir = workdir("attested-published");
+    let f = dir.join("note.txt");
+    fs::write(&f, "content the run reads").unwrap();
+    let (mut run, led) = open_run(&dir, "attested-published");
+    run.call("Read", &f.display().to_string()).unwrap();
+    run.seal("complete").unwrap();
+
+    let registry = gantry::skills::KeyRegistry::load(&repo_path("config/actor-keys.json")).unwrap();
+    let published = registry.published_seed_hexes();
+    assert!(
+        !published.is_empty(),
+        "the tracked laptop key declares seed_published, or this test proves nothing"
+    );
+
+    let report =
+        ledger::verify_with_actor_keys_and_published(&led, &registry.key_hexes(), &published)
+            .unwrap();
+    assert!(report.ok(), "faults: {:?}", report.faults);
+    assert_eq!(
+        report.attestations_under_published_seed, report.attestations_verified,
+        "every laptop-profile attestation is signed under the published fixture seed"
+    );
+
+    // Told about no published seeds, the same ledger reports none: the count
+    // follows the registry's declaration and is never inferred.
+    let unqualified =
+        ledger::verify_with_actor_keys_and_published(&led, &registry.key_hexes(), &[]).unwrap();
+    assert_eq!(
+        unqualified.attestations_verified,
+        report.attestations_verified
+    );
+    assert_eq!(unqualified.attestations_under_published_seed, 0);
+}
+
 /// Altering a signed event after the fact is reported as alteration: the
 /// attestation covers the fields the actor controls, so an edited envelope
 /// no longer verifies under the key that signed it.

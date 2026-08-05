@@ -2,7 +2,8 @@
   "keys": [
     {
       "owner": "agent:gantry-laptop (fixture key; its seed is tracked at config/actor-key-fixture.seed and is public by design, so a laptop-profile attestation proves which run wrote an event, not who the operator was. A deployed profile registers its own key and reads the seed from GANTRY_ACTOR_SEED)",
-      "public_key_hex": "ca32d88ed05fba798c44165af14ef232c5e5c131401626677a222facf6acfe2d"
+      "public_key_hex": "ca32d88ed05fba798c44165af14ef232c5e5c131401626677a222facf6acfe2d",
+      "seed_published": true
     }
   ]
 }

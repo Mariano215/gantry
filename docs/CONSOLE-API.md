@@ -99,8 +99,9 @@ Query parameters, all optional and combinable:
       "redacted": [],
       "prev_hash": "sha256:...",
       "attestation": null,
-      "_subject": {"tool": "Bash", "decision": "deny", "rule": "r-destructive-shell"},
-      "_attestation_state": "absent"
+      "_subject": {"tool": "Bash", "verdict": "deny", "rule": "r-destructive-shell"},
+      "_attestation_state": "verified",
+      "_attestation_trust": "fixture"
     }
   ],
   "total": 14,
@@ -122,6 +123,24 @@ Query parameters, all optional and combinable:
 The front end must show these four states distinctly. Rendering `absent` and
 `verified` the same way would be the exact failure this project exists to
 prevent.
+
+`_attestation_trust` says what a `verified` signature is worth, and it is the
+second half of the same rule:
+
+- `registered`: signed under a key whose seed is held by its owner. This is
+  attribution.
+- `fixture`: signed under a key whose seed is published, as the tracked laptop
+  key's is. The signature is real and proves which run wrote the event, but
+  anyone holding the repository can produce one, so it is not attribution.
+
+The console must qualify a verified badge with this. A laptop run and an
+HSM-backed deployment must not render identically, because the difference is
+the entire claim. The field is meaningful only alongside `verified`; it reads
+`registered` otherwise and carries no weight there.
+
+Note on `_subject`: it is the stored payload passed through verbatim, so its
+shape follows the event kind. A `policy.decision` subject names the outcome in
+`verdict`, not `decision`.
 
 ## `GET /api/events/:id`
 
@@ -222,8 +241,9 @@ calls it on demand, not on a poll.
 {
   "ok": true,
   "entries": 14,
-  "attestations_verified": 0,
+  "attestations_verified": 14,
   "attestations_unverified": 0,
+  "attestations_under_published_seed": 14,
   "faults": [
     {"index": 7, "id": "ev-...", "fault": "leaf hash does not match the stored envelope"}
   ],

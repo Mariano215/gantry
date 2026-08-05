@@ -217,6 +217,14 @@ impl SkillManifest {
 pub struct RegisteredKey {
     pub owner: String,
     pub public_key_hex: String,
+    /// True when the private half is published rather than held, as the
+    /// tracked laptop fixture key is. A signature under such a key proves
+    /// which run wrote an event, never who operated it, because anyone
+    /// holding the repository can produce one. Every report that counts a
+    /// verified attestation must say which kind it verified, or a laptop
+    /// run reads exactly like an HSM-backed one.
+    #[serde(default)]
+    pub seed_published: bool,
 }
 
 /// The managed key registry, a tracked file (`config/skill-keys.json`). A
@@ -269,6 +277,17 @@ impl KeyRegistry {
     /// The key material in the form `SkillManifest::resolve` consumes.
     pub fn key_hexes(&self) -> Vec<String> {
         self.keys.iter().map(|k| k.public_key_hex.clone()).collect()
+    }
+
+    /// The subset whose seed is published. Kept separate from `key_hexes` so
+    /// a caller that wants to count verified attestations honestly cannot
+    /// forget to ask which of them were signed under a key anyone can use.
+    pub fn published_seed_hexes(&self) -> Vec<String> {
+        self.keys
+            .iter()
+            .filter(|k| k.seed_published)
+            .map(|k| k.public_key_hex.clone())
+            .collect()
     }
 }
 

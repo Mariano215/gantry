@@ -88,18 +88,33 @@ fn run() -> Result<i32, Fault> {
         }
         ["ledger", "verify", dir] => {
             let keys_path = Path::new("config/actor-keys.json");
-            let actor_keys: Vec<String> = if keys_path.exists() {
-                gantry::skills::KeyRegistry::load(keys_path)?.key_hexes()
+            let (actor_keys, published): (Vec<String>, Vec<String>) = if keys_path.exists() {
+                let registry = gantry::skills::KeyRegistry::load(keys_path)?;
+                (registry.key_hexes(), registry.published_seed_hexes())
             } else {
-                Vec::new()
+                (Vec::new(), Vec::new())
             };
-            let report = ledger::verify_with_actor_keys(Path::new(dir), &actor_keys)?;
+            let report = ledger::verify_with_actor_keys_and_published(
+                Path::new(dir),
+                &actor_keys,
+                &published,
+            )?;
             println!("entries: {}", report.entries);
             if report.attestations_verified > 0 {
                 println!(
                     "attestations verified against config/actor-keys.json: {}",
                     report.attestations_verified
                 );
+                // A verified signature under a published seed is a real
+                // signature and not attribution. Saying so here is the whole
+                // point: without it a laptop run prints the same line an
+                // HSM-backed deployment prints.
+                if report.attestations_under_published_seed > 0 {
+                    println!(
+                        "of those, {} were signed under a key whose seed is published, so they prove which run wrote the event and not who operated it; a deployment registers its own key and keeps the seed",
+                        report.attestations_under_published_seed
+                    );
+                }
             }
             if report.attestations_unverified > 0 {
                 println!(

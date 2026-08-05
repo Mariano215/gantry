@@ -58,6 +58,11 @@ pub struct VerifyReport {
     pub attestations_unverified: usize,
     /// Attestations checked against a registered actor key and found good.
     pub attestations_verified: usize,
+    /// Of those verified, how many were signed under a key whose seed is
+    /// published. They are real signatures over real bytes and they prove
+    /// which run wrote the event, but anyone holding the seed can produce
+    /// one, so they are not attribution and no report may imply otherwise.
+    pub attestations_under_published_seed: usize,
 }
 
 impl VerifyReport {
@@ -399,18 +404,42 @@ impl AttestationState {
 /// attestation names. A hex key that does not parse is dropped here rather
 /// than treated as a match, so an event signed under it reads as unverified
 /// and never as verified.
-pub struct ActorKeys(Vec<(String, VerifyingKey)>);
+pub struct ActorKeys(Vec<(String, VerifyingKey)>, Vec<String>);
 
 impl ActorKeys {
     pub fn parse(hex_keys: &[String]) -> ActorKeys {
-        ActorKeys(
-            hex_keys
-                .iter()
+        ActorKeys::parse_with_published(hex_keys, &[])
+    }
+
+    /// `published` names the subset whose seed is public. Those keys still
+    /// verify, and `trust_of` reports them as `fixture` so no caller can
+    /// count them as attribution by accident.
+    pub fn parse_with_published(hex_keys: &[String], published: &[String]) -> ActorKeys {
+        let ids = |keys: &[String]| -> Vec<(String, VerifyingKey)> {
+            keys.iter()
                 .filter_map(|hex_key| {
                     crate::skills::parse_vk(hex_key).map(|vk| (crate::skills::key_id_for(&vk), vk))
                 })
-                .collect(),
-        )
+                .collect()
+        };
+        let published_ids = ids(published).into_iter().map(|(id, _)| id).collect();
+        ActorKeys(ids(hex_keys), published_ids)
+    }
+
+    /// What a verified signature under this event's key is worth: `registered`
+    /// when the seed is held, `fixture` when it is published. Only meaningful
+    /// alongside a `Verified` state.
+    pub fn trust_of(&self, env: &Envelope) -> &'static str {
+        let key_id = env
+            .attestation
+            .as_ref()
+            .and_then(|a| a["key_id"].as_str())
+            .unwrap_or("");
+        if self.1.iter().any(|id| id == key_id) {
+            "fixture"
+        } else {
+            "registered"
+        }
     }
 
     /// The one place an attestation is judged. The full verifier and the
@@ -584,6 +613,19 @@ pub fn scan_for_secrets(dir: &Path, secrets: &[(String, String)]) -> Result<Vec<
 /// report says so, because a partial registry must not turn "unchecked" into
 /// "clean".
 pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<VerifyReport, Fault> {
+    verify_with_actor_keys_and_published(dir, actor_keys, &[])
+}
+
+/// The same verification, told which registered keys have a published seed.
+/// A signature under one of those still verifies, and the report counts it
+/// separately so a caller cannot present a laptop fixture attestation as
+/// attribution. Callers that hold a registry should use this form; the
+/// two-argument version exists for callers that have no registry to ask.
+pub fn verify_with_actor_keys_and_published(
+    dir: &Path,
+    actor_keys: &[String],
+    published_seeds: &[String],
+) -> Result<VerifyReport, Fault> {
     let mut report = VerifyReport::default();
     let events = fs::read_to_string(dir.join("events.jsonl")).map_err(io_fault(dir))?;
     let pub_hex = fs::read_to_string(dir.join("keys/ledger.pub")).map_err(io_fault(dir))?;
@@ -754,13 +796,18 @@ pub fn verify_with_actor_keys(dir: &Path, actor_keys: &[String]) -> Result<Verif
     // counted unverified where none does. A registered key that fails to
     // verify is a fault, not a count: the actor either signed different
     // bytes or someone forged the attestation.
-    let registered = ActorKeys::parse(actor_keys);
+    let registered = ActorKeys::parse_with_published(actor_keys, published_seeds);
     for (i, env) in envelopes.iter().enumerate() {
         let Some(env) = env else { continue };
         match registered.state_of(env) {
             AttestationState::Absent => {}
             AttestationState::Unverified => report.attestations_unverified += 1,
-            AttestationState::Verified => report.attestations_verified += 1,
+            AttestationState::Verified => {
+                report.attestations_verified += 1;
+                if registered.trust_of(env) == "fixture" {
+                    report.attestations_under_published_seed += 1;
+                }
+            }
             AttestationState::Forged => {
                 let key_id = env
                     .attestation
