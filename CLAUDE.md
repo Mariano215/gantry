@@ -365,6 +365,32 @@ indistinguishable from a use and the count would be wrong by one.
   `anchor verified` on a rewritten log. Recorded in `docs/proof/18.md`.
   Nothing dispatches on the profile's declared anchoring kind and nothing
   schedules an anchor. `[UNENFORCED]` `ci/anchor-schedule`
+- **A scoring level credits a control running, never what it found.** A
+  primitive reaches a level because the control carrying it ran, so a ledger
+  where the check passed and a ledger where it failed score the same, and a
+  ledger where it never ran scores lower. The alternative is the defect proof
+  13 records: a rule keyed on a sensor's failure message scored a broken
+  repository above a working one, so the way to raise the number was to break
+  the check. Since slice 19 primitive 07 reaches 4 from a `policy.decision`
+  reading `hold` plus an `approval` carrying a `call_hash`, approve and deny
+  alike because a refusal is the gate working, and primitive 12 from a
+  `drift.report` plus a `run.open` carrying `unavailable`, match and
+  divergence alike. The approval predicate matches on `call_hash` because
+  `src/trust.rs` writes the same event kind for a rung promotion, which every
+  ledger at level 3 already has, so the kind alone handed level 4 to level 3's
+  own evidence. A control the ledger cannot see is credited nowhere rather
+  than approximately: attestation, because the record carries no evidence of
+  whose key signed it and a published fixture seed would score as an HSM, and
+  `ledger.anchor`, because a copy the writer controls is not independent of
+  the writer. Enforced by `ci/run.sh` (`ci/scoring-outcome-neutral`, which
+  builds six ledgers with the binary and fails if an outcome moves a level,
+  proved able to fail by inverting each rule in turn) and `tests/scoring.rs`
+  (`the_human_gate_scores_the_same_whether_the_human_said_yes_or_no`,
+  `the_drift_walk_scores_the_same_whether_it_matched_or_diverged`,
+  `the_tracked_rules_and_the_template_copy_are_the_same_file`). A rule the
+  self-audit never exercises is inert, so `docs/proof/08-run.sh` holds a
+  `vcs.publish` call, approves it and walks the requirements; recorded in
+  `docs/proof/19.md`
 
 ## Code standards
 

@@ -98,7 +98,7 @@ decision is on the ledger. Fix: This command is destructive and its
 capability's rollback handle cannot recall it. Scope the deletion to a path
 the run owns, or route it through a capability whose rollback genuinely
 covers it.
-refusal recorded (ledger sealed at size 7)
+refusal recorded (ledger sealed at size 8)
 $ echo $?
 1
 ```
@@ -116,7 +116,7 @@ Now do something allowed:
 ```
 $ ./target/debug/gantry broker call /tmp/demo/ledger Read docs/PLAN.md
 ... file contents ...
-[taint: true] (ledger sealed at size 14)
+[taint: true] (ledger sealed at size 15)
 ```
 
 It ran inside a per-run sandbox with the network denied and writes scoped to a
@@ -125,7 +125,7 @@ data and not instruction.
 
 ### What the ledger holds afterwards
 
-Fourteen events, two runs of seven. Each run is the same shape:
+Fifteen events, two runs. Both share the same seven-event spine:
 
 ```
 run.open        the profile, the instruction pack hash, the settings hash
@@ -136,6 +136,11 @@ policy.decision exactly one per call, allow or deny, naming its rule
 tool.result     outcome, result hash, taint, duration
 run.seal        outcome and the signed tree head at seal
 ```
+
+The denied run carries one more, a `rung.change` between the decision and the
+result. A denial costs the capability a rung, so autonomy comes down on bad
+behaviour and not only on a failed sensor, and the demotion is on the record
+next to the decision that caused it rather than inferred later.
 
 The decision event's payload is the whole adjudication, and it is what an
 incident review reads (abridged here, the message is quoted in full above):
@@ -154,7 +159,7 @@ to never have an event that cannot:
 
 ```json
 {"profile":"laptop",
- "policy_version":"sha256:96e0aa56...",
+ "policy_version":"sha256:b1d79eab...",
  "instruction_version":"sha256:e087ac11...",
  "settings_hash":"sha256:5a22b9dd...",
  "permission_mode":"bypassPermissions",
@@ -178,9 +183,9 @@ attestation against the registered keys:
 
 ```
 $ ./target/debug/gantry ledger verify /tmp/demo/ledger
-entries: 14
-attestations verified against config/actor-keys.json: 14
-of those, 14 were signed under a key whose seed is published, so they prove
+entries: 15
+attestations verified against config/actor-keys.json: 15
+of those, 15 were signed under a key whose seed is published, so they prove
 which run wrote the event and not who operated it; a deployment registers its
 own key and keeps the seed
 ```
@@ -203,7 +208,7 @@ $ cd /tmp/offline && ls
 bundle.json  ledger.pub
 $ sandbox-exec -p '(version 1)(allow default)(deny network*)' \
     gantry ledger verify-inclusion bundle.json ledger.pub
-inclusion verified: entry 4 (id run-1785932956060-4) under signed head size 14
+inclusion verified: entry 4 (id run-1785937403180-4) under signed head size 15
 ```
 
 The bundle is 1673 bytes: one envelope, its index, a three-element proof and
@@ -216,13 +221,13 @@ Copy the ledger, change one character of one timestamp, and verify again:
 
 ```
 $ gantry ledger verify /tmp/demo/tampered
-entries: 14
-attestations verified against config/actor-keys.json: 13
-entry 4 (run-1785932956060-4): chain diverges between entry 4 and entry 5 ...
+entries: 15
+attestations verified against config/actor-keys.json: 14
+entry 4 (run-1785937403180-4): chain diverges between entry 4 and entry 5 ...
   Fix: entry 4 was altered after append; restore it from a replica
-entry 4 (run-1785932956060-4): Merkle root diverges first at tree size 5 ...
+entry 4 (run-1785937403180-4): Merkle root diverges first at tree size 5 ...
   Fix: restore entry 4 from a replica and re-verify
-entry 4 (run-1785932956060-4): carries an attestation under registered key
+entry 4 (run-1785937403180-4): carries an attestation under registered key
   ed25519:407d778d... that does not verify. Fix: the envelope was altered
   after signing, or the attestation was forged; restore the entry from a
   replica or revoke the key

@@ -519,9 +519,14 @@ ledger without trusting the binary.
 
 **Predicate.** One event kind plus an optional JSON pointer and a `present` or
 `equals` test. Each predicate in a level is matched independently against the
-event set. Naming an outcome rather than a control in a predicate is a known
-trap: an early version of the primitive 01 rule scored a failing gate higher
-than a passing one, which paid for breakage. `docs/proof/13.md`.
+whole event set, so two predicates in one `requires` list can be satisfied by
+two unrelated events. Two traps follow. Naming an outcome rather than a
+control pays for breakage: an early version of the primitive 01 rule scored a
+failing gate higher than a passing one (`docs/proof/13.md`). And a predicate on
+a kind alone can be satisfied by an event nobody was thinking about: the first
+primitive 07 level 4 matched `approval`, which `src/trust.rs` also writes
+before a rung promotion, so it handed level 4 to every ledger that reached
+level 3 (`docs/proof/19.md`).
 
 **Evidence sentence.** The string printed beside a score, saying which
 telemetry earned it. A score without evidence is an opinion.

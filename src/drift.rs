@@ -244,7 +244,7 @@ fn read(source: &str, running: &Running) -> Reading {
         "none" | "" => unreadable(
             "the requirement names no observation source",
             format!(
-                "point observed_by at a source this build reads ({}), or accept that the requirement is carried by the document alone and caps primitive 12 at 3",
+                "point observed_by at a source this build reads ({}), or accept that the requirement is carried by the document alone, which this walk reports every run rather than scoring it",
                 READABLE_SOURCES.join(", ")
             ),
         ),
