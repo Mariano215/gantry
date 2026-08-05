@@ -35,6 +35,7 @@ const USAGE: &str = "usage:
   gantry broker register <ledger-dir> <tool-def.json>
   gantry broker call <ledger-dir> <tool> <target>
   gantry audit <ledger-dir> <providers.json> <provider> <file>
+  gantry sensor live <sensor.json>...
   gantry sensor gate <ledger-dir> <sensor.json> <artifact>
   gantry sensor repair <ledger-dir> <sensor.json> <artifact> <providers.json> <provider>
   gantry orchestrate step <ledger-dir> <capability> <sensor.json> <artifact> [approver]
@@ -299,6 +300,9 @@ fn run() -> Result<i32, Fault> {
         ["skill", "sign", package_dir, seed_hex] => skill_sign(package_dir, seed_hex),
         ["template", "validate", template_dir] => template_validate(template_dir).map(|_| 0),
         ["template", "init", template_dir, dest_dir] => template_init(template_dir, dest_dir),
+        ["sensor", "live", sensor_paths @ ..] if !sensor_paths.is_empty() => {
+            sensor_live(sensor_paths)
+        }
         ["sensor", "gate", ledger_dir, sensor_path, artifact] => {
             sensor_gate(ledger_dir, sensor_path, artifact, None)
         }
@@ -738,6 +742,35 @@ fn skill_run(ledger_dir: &str, package_dir: &str, parent_caps: &str) -> Result<i
         sealed.size
     );
     Ok(if failures == 0 { 0 } else { 1 })
+}
+
+/// Standalone liveness sweep: every sensor must reject its own negative
+/// control, without waiting for the next gate to exercise it. This is the
+/// scheduled form of the liveness check, so a sensor that rots between runs
+/// is caught by the sweep, not by the next unlucky verdict. Exits non-zero
+/// if any sensor is broken.
+fn sensor_live(sensor_paths: &[&str]) -> Result<i32, Fault> {
+    let sandbox = gantry::sandbox::Sandbox::per_run(
+        &gantry::sandbox::unique_run_dir("gantry-liveness"),
+        &[],
+    )?;
+    let mut broken = 0u32;
+    for path in sensor_paths {
+        let sensor = Sensor::load(Path::new(path))?;
+        if sensor.is_live(&sandbox)? {
+            println!(
+                "sensor {} is live: it rejects its negative control",
+                sensor.id
+            );
+        } else {
+            broken += 1;
+            eprintln!(
+                "sensor {} is BROKEN: it passed its own negative control, so it cannot fail and its verdicts are worthless. Fix the check so the negative control fails, then re-register.",
+                sensor.id
+            );
+        }
+    }
+    Ok(if broken == 0 { 0 } else { 1 })
 }
 
 /// A harness template is a bundle of policy, providers, sensors and signing

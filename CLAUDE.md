@@ -114,9 +114,12 @@ work item, and `gantry scan` on this repo is expected to report it.
   control is reported as `broken`, never as a clean pass, so a green board of
   dead sensors is impossible. — enforced since slice 05 by `src/sensor.rs`
   (`Sensor::is_live` runs before any trusted verdict); exercised by
-  `tests/sensor.rs` and `docs/proof/05.md`. The gap: liveness is checked at
-  evaluation time, not continuously, so a sensor that rots between runs is
-  caught on next use, not immediately. — `[UNENFORCED]` `ci/sensor-liveness-schedule`
+  `tests/sensor.rs` and `docs/proof/05.md`. Liveness is also swept on a
+  schedule since the post-nine gap work: `gantry sensor live` runs every
+  tracked sensor's negative control standalone, `ci/run.sh` runs the sweep
+  on every push, and the workflow adds a weekly cron so a sensor that rots
+  between pushes is caught by the schedule, not by the next unlucky
+  verdict. — enforced by `ci/run.sh` and `.github/workflows/ci.yml`
 - **An attestation is verified or declared unverified, never assumed.** The
   ledger verifier checks actor attestations against registered keys: an
   attestation under a registered key id is verified (a failure is a fault,

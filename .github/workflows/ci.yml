@@ -9,6 +9,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly liveness sweep: a sensor that rots between pushes is caught by
+    # the schedule, not by the next unlucky verdict (ci/sensor-liveness-schedule).
+    - cron: "0 6 * * 1"
 
 jobs:
   gate:
