@@ -1,0 +1,9 @@
+{
+  "id": "always-green",
+  "kind": "computational",
+  "placement": "post_integration",
+  "blocking": true,
+  "check": "true # {target}",
+  "fix": "This message is unreachable because the check never fails.",
+  "negative_control": "-----BEGIN PRIVATE KEY-----\nMIIabc\n-----END PRIVATE KEY-----\n"
+}
