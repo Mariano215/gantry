@@ -1,0 +1,68 @@
+{
+  "profile": "laptop",
+  "version": "sha256:8330dcc4f1a9b02e5c77d1e6b4a0f39c2d8e1147ab55c0d9e3f2a6b7c8d9e0f1",
+  "capabilities": [
+    {
+      "id": "repo.read",
+      "rung": "autonomous",
+      "effect": "read",
+      "rollback": null
+    },
+    {
+      "id": "repo.write",
+      "rung": "assisted",
+      "effect": "write.local",
+      "rollback": "git.worktree"
+    },
+    {
+      "id": "vcs.publish",
+      "rung": "led",
+      "effect": "irreversible",
+      "rollback": null
+    },
+    {
+      "id": "net.egress",
+      "rung": "led",
+      "effect": "write.shared",
+      "rollback": null
+    }
+  ],
+  "rules": [
+    {
+      "id": "r-repo-read",
+      "decision": "allow",
+      "message": "reads inside the repository are allowed at any rung",
+      "fired": 1
+    },
+    {
+      "id": "r-destructive-shell",
+      "decision": "deny",
+      "message": "this command deletes a tree with no rollback handle; stage the change in a git worktree and rerun, or declare a rollback on the capability",
+      "fired": 1
+    },
+    {
+      "id": "r-write-needs-review",
+      "decision": "hold",
+      "message": "a shared write at the assisted rung needs a human approval; request one with gantry approve, naming the capability",
+      "fired": 1
+    },
+    {
+      "id": "r-irreversible-needs-led",
+      "decision": "deny",
+      "message": "an irreversible effect runs only at the led rung; ask the operator to run this step directly",
+      "fired": 1
+    },
+    {
+      "id": "r-delegation",
+      "decision": "deny",
+      "message": "this call is outside the capability set granted at subagent.spawn; widen the grant at spawn time or drop the call",
+      "fired": 0
+    },
+    {
+      "id": "r-secret-in-argument",
+      "decision": "deny",
+      "message": "a credential value appears in a tool argument; pass the handle instead and let the broker substitute at the boundary",
+      "fired": 0
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "runs": [
+    {
+      "run_id": "run-1754380600000",
+      "opened_at": "2025-08-05T07:56:40.000Z",
+      "sealed_at": null,
+      "sealed": false,
+      "workload": "instruction-drift",
+      "events": 8,
+      "kinds": {
+        "run.open": 1,
+        "skill.resolve": 1,
+        "subagent.spawn": 1,
+        "model.call": 1,
+        "tool.request": 1,
+        "policy.decision": 1,
+        "sensor.verdict": 1,
+        "score.snapshot": 1
+      },
+      "denials": 1,
+      "unattested": 1
+    },
+    {
+      "run_id": "run-1754380000000",
+      "opened_at": "2025-08-05T07:46:40.000Z",
+      "sealed_at": "2025-08-05T07:46:50.900Z",
+      "sealed": true,
+      "workload": "repo-audit",
+      "events": 16,
+      "kinds": {
+        "run.open": 1,
+        "model.call": 1,
+        "tool.request": 3,
+        "policy.decision": 3,
+        "tool.result": 3,
+        "sensor.verdict": 1,
+        "approval": 1,
+        "capability.run": 1,
+        "graph.query": 1,
+        "run.seal": 1
+      },
+      "denials": 1,
+      "unattested": 5
+    }
+  ]
+}

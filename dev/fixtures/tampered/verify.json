@@ -1,0 +1,31 @@
+{
+  "ok": false,
+  "entries": 24,
+  "attestations_verified": 17,
+  "attestations_unverified": 1,
+  "faults": [
+    {
+      "index": 6,
+      "id": "ev-01JQ0006ZK9F3TQW06",
+      "fault": "attestation under registered key id gateway-local-1 does not verify: the envelope was altered after it was signed"
+    },
+    {
+      "index": 12,
+      "id": "ev-01JQ0012ZK9F3TQW12",
+      "fault": "prev_hash does not match the leaf hash of the previous envelope"
+    },
+    {
+      "index": 12,
+      "id": "ev-01JQ0012ZK9F3TQW12",
+      "fault": "leaf hash does not match the stored envelope"
+    }
+  ],
+  "head": {
+    "size": 24,
+    "root_hash": "sha256:4c9a71e5bd0f2836a15c9e47d3b8fa62710d94ce5f83b0a2617dc48e9f35ab07",
+    "ts": "2025-08-05T08:01:51.000Z",
+    "key_id": "ledger-local-1",
+    "sig": "MEUCIQD8kZ2vXq7nR4mLpT0wYcBjHf1sAeNdUx9oGvC3rK6iLwIgV5tBnQ2mHy8dEfJ4uXo1aZbS7cPqW0kMr6TgN3vDyEs="
+  },
+  "reproduce": "gantry ledger verify /var/lib/gantry/ledger"
+}
