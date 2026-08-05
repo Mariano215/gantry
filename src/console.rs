@@ -117,16 +117,6 @@ impl Response {
         }
     }
 
-    fn html(body: String) -> Response {
-        Response {
-            status: 200,
-            reason: "OK",
-            content_type: HTML,
-            extra: "",
-            body,
-        }
-    }
-
     fn fault(status: u16, reason: &'static str, extra: &'static str, fault: &Fault) -> Response {
         Response {
             status,
@@ -398,6 +388,28 @@ fn digits(s: &str, n: usize) -> bool {
 
 // -- routing ----------------------------------------------------------------
 
+/// The console's static assets, embedded at build time. Text only: the logo
+/// travels as a data URI inside the stylesheet, so there is no binary asset
+/// and no second process serving files. See `assets/WIRING.md`.
+const ASSETS: &[(&str, &str, &str)] = &[
+    ("/", include_str!("../assets/index.html"), HTML),
+    ("/index.html", include_str!("../assets/index.html"), HTML),
+    (
+        "/console.css",
+        include_str!("../assets/console.css"),
+        "text/css; charset=utf-8",
+    ),
+    ("/app.js", include_str!("../assets/app.js"), JS),
+    ("/api.js", include_str!("../assets/api.js"), JS),
+    ("/ui.js", include_str!("../assets/ui.js"), JS),
+    ("/views.js", include_str!("../assets/views.js"), JS),
+];
+
+/// A module served under a content type that is not a JavaScript MIME type is
+/// refused by the browser and the console renders as a blank shell, so this is
+/// load-bearing rather than cosmetic.
+const JS: &str = "text/javascript; charset=utf-8";
+
 fn respond(ledger_dir: &str, request: &Request) -> Response {
     debug_assert_eq!(request.method, "GET");
     if let Some(route) = request.path.strip_prefix("/api/") {
@@ -406,22 +418,28 @@ fn respond(ledger_dir: &str, request: &Request) -> Response {
             Err((status, reason, fault)) => Response::fault(status, reason, "", &fault),
         };
     }
-    // Unknown non-API paths serve the console shell, so the front end owns
-    // its own routing.
-    match scorecard(ledger_dir) {
-        Ok(body) => Response::html(body),
-        Err((status, reason, fault)) => Response {
-            status,
-            reason,
-            content_type: HTML,
+    if let Some((body, content_type)) = ASSETS
+        .iter()
+        .find(|(p, _, _)| *p == request.path)
+        .map(|(_, body, ct)| (*body, *ct))
+    {
+        return Response {
+            status: 200,
+            reason: "OK",
+            content_type,
             extra: "",
-            body: format!(
-                "<!doctype html><meta charset=utf-8><title>Gantry console</title>\
-<h1>The console cannot read the ledger</h1><p>{}</p><p><b>Fix:</b> {}</p>",
-                escape(&fault.cause),
-                escape(&fault.fix)
-            ),
-        },
+            body: body.to_string(),
+        };
+    }
+    // Every other non-API path serves the shell, so the front end owns its own
+    // routing. The shell is static, so a ledger it cannot read is a problem the
+    // console reports through /api/verify rather than a page that fails to load.
+    Response {
+        status: 200,
+        reason: "OK",
+        content_type: HTML,
+        extra: "",
+        body: ASSETS[0].1.to_string(),
     }
 }
 
@@ -868,13 +886,10 @@ fn verify(ledger_dir: &str) -> Result<Value, ApiError> {
 
 // -- the console shell ------------------------------------------------------
 
-fn scorecard(ledger_dir: &str) -> Result<String, ApiError> {
-    Ok(scorecard_html(&snapshot(ledger_dir)?))
-}
-
-/// A self-contained static console: the scorecard, generated from the
-/// snapshot. Slice 11 replaces this with the six-view console under
-/// `assets/`; until it lands, a non-API path serves this rather than nothing.
+/// The scorecard as one self-contained page, generated from a snapshot. The
+/// served console is the six-view application under `assets/`; this remains
+/// because `gantry score <ledger> <rules> <out.html>` writes a single file
+/// somebody can attach to a report, which a client-rendered app cannot do.
 pub fn scorecard_html(snapshot: &ScoreSnapshot) -> String {
     let overall = snapshot
         .overall
@@ -888,9 +903,15 @@ pub fn scorecard_html(snapshot: &ScoreSnapshot) -> String {
             Some(n) => (n.to_string(), "low"),
             None => ("N/A".to_string(), "na"),
         };
+        // The name and evidence come from config/scoring.json, and the whole
+        // point of shipping the rules as data is that a third party runs their
+        // own. Their text must not become markup in a file somebody attaches
+        // to a report.
         rows.push_str(&format!(
             "<tr class=\"{cls}\"><td>{:02}</td><td>{}</td><td class=\"score\">{score}</td><td>{}</td></tr>\n",
-            p.primitive, p.name, p.evidence
+            p.primitive,
+            escape(&p.name),
+            escape(&p.evidence)
         ));
     }
     format!(

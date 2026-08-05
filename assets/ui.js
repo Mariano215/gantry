@@ -296,7 +296,17 @@ export function subjectSummary(ev) {
   const parts = [];
   const push = (label, value, cls) => {
     if (value === undefined || value === null || value === '') return;
-    parts.push(el('span', { class: cls || null }, label ? `${label} ` : '', mono(String(value))));
+    // Several subjects carry an identity as an object rather than a string
+    // (approval.approver is {id, source}). String() on one of those renders
+    // "[object Object]", which is worse than showing nothing: it looks like
+    // data. Take the id when there is one, and skip the field otherwise
+    // rather than printing a shape.
+    let text = value;
+    if (typeof text === 'object') {
+      if (typeof text.id !== 'string') return;
+      text = text.id;
+    }
+    parts.push(el('span', { class: cls || null }, label ? `${label} ` : '', mono(String(text))));
   };
   switch (ev.kind) {
     case 'policy.decision': {
