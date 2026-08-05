@@ -1,0 +1,1085 @@
+<!-- Built by dev/build-site.py from dev/site-src/gantry.dc.html.
+     Edit the source, not this file: the next build overwrites it. -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gantry</title>
+<link rel="icon" href="assets/logo.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./vendor/react.production.min.js"></script>
+<script src="./vendor/react-dom.production.min.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="styles.css">
+<style>
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #0d0e12; color: #f0f2f8; font-family: var(--font-body, Manrope), system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: #2b7fe8; text-decoration: none; }
+  a:hover { color: #f0f2f8; }
+  ::selection { background: rgba(43,127,232,.35); }
+  @keyframes g-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  @keyframes g-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @keyframes g-dash { to { stroke-dashoffset: -220; } }
+  @keyframes g-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+  @keyframes g-ping { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.6); opacity: 0; } }
+</style>
+</helmet>
+
+<div data-screen-label="Gantry README" style="position: relative; background: #0d0e12; overflow-x: hidden;">
+
+  <nav style="position: sticky; top: 0; z-index: 50; height: 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(1.25rem, 4vw, 3rem); background: rgba(13,14,18,.78); backdrop-filter: blur(12px); border-bottom: 1px solid #1e2235;">
+    <a href="#top" style="display: flex; align-items: center; gap: .6rem;">
+      <img src="assets/logo.png" alt="Gantry" style="height: 26px; width: auto; filter: brightness(1.45) saturate(1.05);">
+      <span style="font-family: var(--font-display, 'Plus Jakarta Sans'), sans-serif; font-weight: 700; letter-spacing: -.03em; font-size: 1.05rem; color: #f0f2f8;">Gantry</span>
+    </a>
+    <div style="display: flex; align-items: center; gap: clamp(.75rem, 2vw, 1.6rem); font-family: var(--font-mono, 'JetBrains Mono'), monospace; font-size: .6rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291;">
+      <a href="#problem" style="color: #6b7291;">Problem</a>
+      <a href="#architecture" style="color: #6b7291;">Architecture</a>
+      <a href="#demo" style="color: #6b7291;">First hour</a>
+      <a href="#concepts" style="color: #6b7291;">Concepts</a>
+      <a href="#primitives" style="color: #6b7291;">Primitives</a>
+      <a href="#console" style="color: #6b7291;">Console</a>
+      <a href="https://github.com/Mariano215/gantry" style="color: #2b7fe8; border: 1px solid rgba(43,127,232,.3); border-radius: 3px; padding: .45rem .7rem;">GitHub →</a>
+    </div>
+  </nav>
+
+  <header id="top" style="position: relative; min-height: 92vh; display: flex; flex-direction: column; justify-content: center; padding: clamp(4rem, 9vw, 8rem) clamp(1.5rem, 5vw, 4rem) clamp(3rem, 6vw, 5rem);">
+    <canvas ref="{{ canvasRef }}" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none;"></canvas>
+    <div style="position: absolute; inset: 0; background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(43,127,232,.13), transparent 70%);"></div>
+    <div style="position: absolute; inset: 0; background: radial-gradient(ellipse 120% 80% at 50% 100%, transparent 45%, #0d0e12 100%);"></div>
+
+    <div style="position: relative; width: 100%; max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: 1.6rem;">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: flex; align-items: center; gap: .7rem; font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291;">
+        <span style="position: relative; display: inline-flex; width: 6px; height: 6px;">
+          <span style="position: absolute; inset: 0; border-radius: 9999px; background: #2b7fe8; animation: g-ping 1.6s cubic-bezier(0,0,.2,1) infinite;"></span>
+          <span style="position: relative; width: 6px; height: 6px; border-radius: 9999px; background: #2b7fe8;"></span>
+        </span>
+        <span>Pre-1.0 · actively built · Apache-2.0</span>
+      </div>
+
+      <h1 data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .1s; margin: 0; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.035em; line-height: 1.03; font-size: clamp(2.4rem, 6.4vw, 5rem); max-width: 30ch;">The harness half of an agent, <span style="color: #2b7fe8;">built as a product</span> instead of assembled per project.</h1>
+
+      <p data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .2s; margin: 0; max-width: 62ch; font-size: clamp(1rem, 1.35vw, 1.15rem); line-height: 1.6; color: #9aa3bd; text-wrap: pretty;">A control plane that sits between your AI agents and everything they can touch, records every decision on a tamper-evident log, and scores how well it is doing that from its own telemetry rather than its own documentation.</p>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .3s; display: flex; flex-wrap: wrap; gap: .5rem;">
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">One static binary</span>
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">No cloud account</span>
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">No phone-home</span>
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">Runs air-gapped</span>
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">Any model provider</span>
+        <span style="font-family: var(--font-mono, monospace); font-size: .66rem; color: #9aa3bd; background: rgba(19,21,32,.7); border: 1px solid #1e2235; border-radius: 3px; padding: .4rem .65rem;">Any agent framework</span>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .4s; display: flex; flex-wrap: wrap; gap: .75rem; margin-top: .4rem;">
+        <a href="#demo" style="display: inline-flex; align-items: center; gap: .5rem; background: #2b7fe8; color: #0d0e12; font-family: var(--font-display, sans-serif); font-weight: 700; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; padding: .8rem 1.2rem; border-radius: 3px; transition: transform 160ms cubic-bezier(.23,1,.32,1), background 160ms;" style-hover="background: #1a4f9a; transform: translateY(-1px); color: #0d0e12;">Watch the first hour →</a>
+        <a href="https://github.com/Mariano215/gantry" style="display: inline-flex; align-items: center; gap: .5rem; background: rgba(19,21,32,.6); color: #f0f2f8; border: 1px solid #1e2235; font-family: var(--font-display, sans-serif); font-weight: 600; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; padding: .8rem 1.2rem; border-radius: 3px; transition: border-color 160ms, transform 160ms;" style-hover="border-color: rgba(43,127,232,.4); transform: translateY(-1px); color: #f0f2f8;">Read the source</a>
+      </div>
+    </div>
+  </header>
+
+  <section id="problem" data-screen-label="The problem" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(2rem, 4vw, 3rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">The problem, in plain English</div>
+        <h2 style="margin: 0; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 34ch;">The industry spent five years on the model half.</h2>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(1.5rem, 3vw, 2.5rem);">
+        <p data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; margin: 0; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">An agent is two things: a model, and the harness around it. The model writes the code. The harness decides whether the command it just proposed is allowed to run, what credentials it can see, what happens when a check fails, and whether anyone can reconstruct all of that afterwards.</p>
+        <p data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .12s; margin: 0; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">The harness half is still hand-assembled at every company that needs one: a permissions file here, some logging there, an approval step that exists in a Slack thread. It works until someone asks a question it cannot answer.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1px; background: #1e2235; border: 1px solid #1e2235;">
+        <sc-for list="{{ questions }}" as="q" hint-placeholder-count="3">
+          <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; background: #0d0e12; padding: clamp(1.5rem, 3vw, 2.25rem); display: flex; flex-direction: column; gap: .9rem; transition: background 200ms;" style-hover="background: #10121a;">
+            <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; color: #2b7fe8;">{{ q.n }}</div>
+            <div style="font-family: var(--font-display, sans-serif); font-weight: 600; letter-spacing: -.02em; font-size: 1.15rem; line-height: 1.25; color: #f0f2f8;">{{ q.q }}</div>
+            <div style="color: #6b7291; font-size: .86rem; line-height: 1.6; text-wrap: pretty;">{{ q.a }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border-left: 2px solid #2b7fe8; padding: .35rem 0 .35rem 1.4rem; max-width: 62ch;">
+        <p style="margin: 0; font-family: var(--font-display, sans-serif); font-size: clamp(1.05rem, 1.8vw, 1.3rem); line-height: 1.45; letter-spacing: -.02em; color: #f0f2f8; text-wrap: pretty;">Every model call goes through one gateway. Every tool call goes through one broker that consults a policy and names the rule behind each decision. Both write to an append-only cryptographic log that a third party can verify offline, without trusting the binary that wrote it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="architecture" data-screen-label="Architecture" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235; background: #0b0c10;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(2rem, 4vw, 3rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">One chokepoint, one record</div>
+        <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 32ch;">The request path, and the record it cannot avoid.</h2>
+        <p style="margin: 0; max-width: 62ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">Solid lines are the request path. Dotted lines are the record: nothing is trusted that is not on it, and the score at the end is derived from that record rather than from what any config file claims.</p>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border: 1px solid #1e2235; background: #0d0e12; padding: clamp(1rem, 3vw, 2rem);">
+        <svg viewBox="0 0 1080 520" style="width: 100%; height: auto; display: block; font-family: var(--font-mono, monospace);" data-om-raster>
+          <defs>
+            <marker id="g-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#3d4661"></path>
+            </marker>
+            <marker id="g-arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#2b7fe8"></path>
+            </marker>
+          </defs>
+
+          <path d="M 176 110 H 236" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 176 150 V 250 H 236" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 416 110 H 500" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 416 250 H 500" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 700 228 H 776" stroke="#2b7fe8" stroke-width="1.4" fill="none" marker-end="url(#g-arrow-a)"></path>
+          <path d="M 600 312 V 330" stroke="#6b7291" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 866 262 V 306" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+
+          <path d="M 306 150 V 414" stroke="#2b7fe8" stroke-width="1.2" fill="none" stroke-dasharray="4 6" opacity=".8" style="animation: g-dash 6s linear infinite;"></path>
+          <path d="M 306 290 V 414" stroke="#2b7fe8" stroke-width="1.2" fill="none" stroke-dasharray="4 6" opacity=".8" style="animation: g-dash 6s linear infinite;"></path>
+          <path d="M 600 404 V 414" stroke="#2b7fe8" stroke-width="1.2" fill="none" stroke-dasharray="4 6" opacity=".8" style="animation: g-dash 6s linear infinite;"></path>
+          <path d="M 866 346 V 414" stroke="#2b7fe8" stroke-width="1.2" fill="none" stroke-dasharray="4 6" opacity=".8" style="animation: g-dash 6s linear infinite;"></path>
+          <path d="M 620 460 V 486 H 320" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+          <path d="M 620 460 V 486 H 900" stroke="#3d4661" stroke-width="1.4" fill="none" marker-end="url(#g-arrow)"></path>
+
+          <g>
+            <rect x="16" y="82" width="160" height="86" rx="3" fill="#131520" stroke="#294067"></rect>
+            <text x="36" y="112" fill="#f0f2f8" font-size="14" font-weight="500">Your agent</text>
+            <text x="36" y="134" fill="#6b7291" font-size="11">any framework</text>
+            <text x="36" y="152" fill="#6b7291" font-size="11">LangGraph · Claude Code</text>
+          </g>
+
+          <g>
+            <rect x="236" y="82" width="180" height="68" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="256" y="110" fill="#f0f2f8" font-size="14" font-weight="500">Model gateway</text>
+            <text x="256" y="132" fill="#6b7291" font-size="11">src/gateway.rs</text>
+          </g>
+          <g>
+            <rect x="236" y="222" width="180" height="68" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="256" y="250" fill="#f0f2f8" font-size="14" font-weight="500">Tool broker</text>
+            <text x="256" y="272" fill="#6b7291" font-size="11">src/broker.rs</text>
+          </g>
+
+          <g>
+            <rect x="500" y="82" width="200" height="68" rx="3" fill="#0d0e12" stroke="#1e2235"></rect>
+            <text x="520" y="110" fill="#9aa3bd" font-size="14">Providers</text>
+            <text x="520" y="132" fill="#6b7291" font-size="11">OpenAI · local · …</text>
+          </g>
+          <g>
+            <rect x="500" y="200" width="200" height="112" rx="3" fill="#131520" stroke="#294067"></rect>
+            <text x="520" y="228" fill="#f0f2f8" font-size="14" font-weight="500">Policy engine</text>
+            <text x="520" y="250" fill="#6b7291" font-size="11">allow / hold / deny</text>
+            <text x="520" y="268" fill="#6b7291" font-size="11">exactly one decision</text>
+            <text x="520" y="286" fill="#6b7291" font-size="11">per call, naming its rule</text>
+            <text x="520" y="304" fill="#6b7291" font-size="11">src/policy.rs</text>
+          </g>
+
+          <g>
+            <rect x="776" y="194" width="180" height="68" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="796" y="220" fill="#f0f2f8" font-size="14" font-weight="500">Sandbox</text>
+            <text x="796" y="240" fill="#6b7291" font-size="11">no egress; secrets injected</text>
+            <text x="796" y="256" fill="#6b7291" font-size="11">at the boundary</text>
+          </g>
+          <g>
+            <rect x="500" y="330" width="200" height="74" rx="3" fill="#1a0f13" stroke="#3a1d22"></rect>
+            <text x="520" y="358" fill="#ff8a86" font-size="14" font-weight="500">Refusal</text>
+            <text x="520" y="380" fill="#a8737a" font-size="11">names the rule</text>
+            <text x="520" y="396" fill="#a8737a" font-size="11">and the fix</text>
+          </g>
+          <g>
+            <rect x="776" y="306" width="180" height="40" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="796" y="331" fill="#9aa3bd" font-size="12">Sensors</text>
+          </g>
+
+          <g>
+            <rect x="176" y="414" width="728" height="46" rx="3" fill="#0f1830" stroke="#294067"></rect>
+            <text x="200" y="443" fill="#f0f2f8" font-size="14" font-weight="500">Evidence ledger</text>
+            <text x="352" y="443" fill="#6b7291" font-size="11">append-only Merkle log · signed tree heads · offline-verifiable · src/ledger.rs</text>
+          </g>
+
+          <g>
+            <rect x="120" y="470" width="200" height="34" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="140" y="492" fill="#9aa3bd" font-size="12">Conformance scorer</text>
+          </g>
+          <g>
+            <rect x="900" y="470" width="140" height="34" rx="3" fill="#131520" stroke="#1e2235"></rect>
+            <text x="920" y="492" fill="#9aa3bd" font-size="12">Console</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section id="demo" data-screen-label="First hour demo" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(1.75rem, 3.5vw, 2.5rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">The first hour</div>
+        <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 34ch;">Build it, watch a call get refused, then check the record yourself.</h2>
+        <p style="margin: 0; max-width: 62ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">One sitting, start to finish. Every command and every line of output below came from a real run on a laptop. Nothing is a mock-up.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 1px; background: #1e2235; border: 1px solid #1e2235; align-items: stretch;">
+        <div style="background: #0b0c10; display: flex; flex-direction: column;">
+          <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6">
+            <button onClick="{{ s.pick }}" style="all: unset; cursor: pointer; display: flex; gap: .75rem; align-items: baseline; padding: .95rem 1.1rem; border-bottom: 1px solid #14171f; background: {{ s.bg }}; transition: background 160ms;" style-hover="background: #12141c;">
+              <span style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .1em; color: {{ s.numColor }};">{{ s.n }}</span>
+              <span style="font-family: var(--font-display, sans-serif); font-size: .88rem; font-weight: 500; letter-spacing: -.01em; color: {{ s.color }}; line-height: 1.3;">{{ s.label }}</span>
+            </button>
+          </sc-for>
+          <div style="margin-top: auto; display: flex; gap: .4rem; padding: 1rem 1.1rem;">
+            <button onClick="{{ toggle }}" style="all: unset; cursor: pointer; font-family: var(--font-mono, monospace); font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; color: #f0f2f8; border: 1px solid #294067; border-radius: 3px; padding: .5rem .8rem;" style-hover="border-color: #2b7fe8;">{{ playLabel }}</button>
+            <button onClick="{{ restart }}" style="all: unset; cursor: pointer; font-family: var(--font-mono, monospace); font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; color: #6b7291; border: 1px solid #1e2235; border-radius: 3px; padding: .5rem .8rem;" style-hover="color: #f0f2f8; border-color: #294067;">Restart</button>
+          </div>
+        </div>
+
+        <div style="background: #08090d; display: flex; flex-direction: column; min-height: 460px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: .6rem .9rem; border-bottom: 1px solid #14171f; font-family: var(--font-mono, monospace); font-size: .6rem; letter-spacing: .12em; color: #4d5570;">
+            <span>~/gantry — zsh</span>
+            <span>{{ progressLabel }}</span>
+          </div>
+          <div ref="{{ termRef }}" style="flex: 1; overflow: auto; padding: 1.1rem 1.1rem 1.6rem; font-family: var(--font-mono, monospace); font-size: .76rem; line-height: 1.75; max-height: 460px;">
+            <sc-for list="{{ lines }}" as="l" hint-placeholder-count="8">
+              <div style="display: flex; gap: .55rem; white-space: pre-wrap; word-break: break-word;">
+                <sc-if value="{{ l.isCmd }}" hint-placeholder-val="{{ true }}">
+                  <span style="color: #2b7fe8; user-select: none;">$</span>
+                </sc-if>
+                <span style="color: {{ l.c }};">{{ l.t }}<sc-if value="{{ l.cursor }}" hint-placeholder-val="{{ false }}"><span style="display: inline-block; width: .5em; height: 1em; margin-left: 1px; background: #2b7fe8; vertical-align: text-bottom; animation: g-blink 1s steps(1) infinite;"></span></sc-if></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; border-top: 1px solid #1e2235; padding-top: 1.5rem;">
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .6rem;">What just happened</div>
+          <p style="margin: 0; color: #f0f2f8; font-size: .95rem; line-height: 1.6; text-wrap: pretty;">{{ note }}</p>
+        </div>
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .6rem;">Reproduce</div>
+          <p style="margin: 0; color: #6b7291; font-size: .86rem; line-height: 1.6;">cargo build, then <span style="color: #9aa3bd;">zsh docs/proof/08-run.sh</span> exercises every layer and reproduces the full scorecard. Each slice carries its own proof document in <span style="color: #9aa3bd;">docs/proof/</span>, produced by running the thing rather than reasoning about it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="concepts" data-screen-label="Concepts" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235; background: #0b0c10;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(2rem, 4vw, 3rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">The vocabulary</div>
+        <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 32ch;">Four ideas carry the whole design.</h2>
+        <p style="margin: 0; max-width: 62ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">Capability, effect, rung and gate are one idea in four words. <a href="https://github.com/Mariano215/gantry/blob/main/docs/GLOSSARY.md">docs/GLOSSARY.md</a> defines every term, grouped by what you are trying to work out, and ends with the ones that are declared and not yet running.</p>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1px; background: #1e2235; border: 1px solid #1e2235;">
+        <sc-for list="{{ concepts }}" as="c" hint-placeholder-count="4">
+          <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; background: #0d0e12; padding: clamp(1.4rem, 2.6vw, 2rem); display: flex; flex-direction: column; gap: .8rem;">
+            <div style="display: flex; align-items: baseline; gap: .6rem;">
+              <span style="color: #2b7fe8; font-size: .6rem;">◆</span>
+              <span style="font-family: var(--font-display, sans-serif); font-weight: 600; letter-spacing: -.02em; font-size: 1.1rem; color: #f0f2f8;">{{ c.title }}</span>
+            </div>
+            <div style="font-family: var(--font-mono, monospace); font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: #6b7291;">{{ c.vals }}</div>
+            <p style="margin: 0; color: #9aa3bd; font-size: .89rem; line-height: 1.65; text-wrap: pretty;">{{ c.body }}</p>
+            <p style="margin: 0; padding-top: .8rem; border-top: 1px solid #1e2235; color: #6b7291; font-size: .82rem; line-height: 1.6; text-wrap: pretty;">{{ c.edge }}</p>
+          </div>
+        </sc-for>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border: 1px solid #1e2235; background: #0d0e12;">
+        <div style="padding: clamp(1.25rem, 3vw, 2rem) clamp(1.25rem, 3vw, 2rem) 0;">
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .7rem;">Try the policy engine</div>
+          <h3 style="margin: 0 0 .5rem; font-family: var(--font-display, sans-serif); font-weight: 600; letter-spacing: -.025em; font-size: clamp(1.15rem, 2vw, 1.5rem); color: #f0f2f8;">Pick a call. Read the verdict, the rule and the fix.</h3>
+          <p style="margin: 0 0 1.2rem; color: #6b7291; font-size: .86rem; line-height: 1.6; max-width: 60ch;">Every rule, message and capability below is the tracked <span style="color: #9aa3bd;">config/policy.json</span> on the laptop profile.</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: .5rem; padding: 0 clamp(1.25rem, 3vw, 2rem) 1.25rem;">
+          <sc-for list="{{ sims }}" as="s" hint-placeholder-count="6">
+            <button onClick="{{ s.pick }}" style="all: unset; cursor: pointer; font-family: var(--font-mono, monospace); font-size: .72rem; color: {{ s.color }}; background: {{ s.bg }}; border: 1px solid {{ s.bc }}; border-radius: 3px; padding: .5rem .75rem; transition: all 160ms;" style-hover="border-color: rgba(43,127,232,.5);">{{ s.cmd }}</button>
+          </sc-for>
+        </div>
+        <div style="border-top: 1px solid #1e2235; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+          <div style="padding: clamp(1.25rem, 3vw, 2rem); display: flex; flex-direction: column; gap: 1rem; border-right: 1px solid #1e2235;">
+            <div style="display: flex; align-items: center; gap: .7rem;">
+              <span style="font-family: var(--font-mono, monospace); font-size: .68rem; letter-spacing: .18em; text-transform: uppercase; font-weight: 500; color: {{ sim.vColor }}; border: 1px solid {{ sim.vBorder }}; background: {{ sim.vBg }}; border-radius: 3px; padding: .35rem .6rem;">{{ sim.verdict }}</span>
+              <span style="font-family: var(--font-mono, monospace); font-size: .72rem; color: #2b7fe8;">{{ sim.rule }}</span>
+            </div>
+            <p style="margin: 0; color: #f0f2f8; font-size: .92rem; line-height: 1.6; text-wrap: pretty;">{{ sim.message }}</p>
+            <p style="margin: 0; color: #6b7291; font-size: .82rem; line-height: 1.6; text-wrap: pretty;">{{ sim.after }}</p>
+          </div>
+          <div style="padding: clamp(1.25rem, 3vw, 2rem); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; align-content: start;">
+            <div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .35rem;">Capability</div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .8rem; color: #f0f2f8;">{{ sim.capability }}</div>
+            </div>
+            <div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .35rem;">Effect class</div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .8rem; color: #f0f2f8;">{{ sim.effect }}</div>
+            </div>
+            <div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .35rem;">Rung</div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .8rem; color: #f0f2f8;">{{ sim.rung }}</div>
+            </div>
+            <div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .35rem;">Gate</div>
+              <div style="font-family: var(--font-mono, monospace); font-size: .8rem; color: #f0f2f8;">{{ sim.gate }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: clamp(1.5rem, 3vw, 2.5rem); align-items: start;">
+        <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border: 1px solid #1e2235; background: #0d0e12; padding: clamp(1.4rem, 2.6vw, 2rem);">
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .8rem;">The seven-event spine</div>
+          <p style="margin: 0 0 1.4rem; color: #9aa3bd; font-size: .89rem; line-height: 1.65; text-wrap: pretty;">Every run writes the same skeleton, whatever it did. The denied run carries one more event, a <span style="font-family: var(--font-mono, monospace); color: #f0f2f8;">rung.change</span> between the decision and the result: a denial costs the capability a rung, and the demotion sits next to the decision that caused it rather than being inferred later.</p>
+          <div style="display: flex; flex-direction: column;">
+            <sc-for list="{{ spine }}" as="e" hint-placeholder-count="8">
+              <div style="display: grid; grid-template-columns: 12px minmax(0, 140px) minmax(0, 1fr); gap: .8rem; align-items: baseline; padding: .55rem 0; border-bottom: 1px solid #14171f;">
+                <span style="color: {{ e.dot }}; font-size: .55rem;">◆</span>
+                <span style="font-family: var(--font-mono, monospace); font-size: .74rem; color: {{ e.kindColor }};">{{ e.kind }}</span>
+                <span style="color: #6b7291; font-size: .8rem; line-height: 1.5;">{{ e.what }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .12s; display: flex; flex-direction: column; gap: 1.25rem;">
+          <div style="border: 1px solid #1e2235; background: #08090d;">
+            <div style="display: flex; justify-content: space-between; padding: .6rem .9rem; border-bottom: 1px solid #14171f; font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #4d5570;">
+              <span>policy.decision payload</span>
+              <span>what an incident review reads</span>
+            </div>
+            <pre style="margin: 0; padding: 1rem; overflow-x: auto; font-family: var(--font-mono, monospace); font-size: .72rem; line-height: 1.7; color: #9aa3bd;">{"capability":"shell.exec","effect":"write.local",
+ "gate":"post",
+ "identity":{"id":"user:mariano@local","source":"local"},
+ "message":"This command is destructive and its
+   capability's rollback handle cannot recall it. …",
+ "request":{"args_hash":"sha256:2f3b9457…",
+            "target":"rm -rf /","tool":"Bash"},
+ "rule":<span style="color: #2b7fe8;">"r-destructive-shell"</span>,
+ "rung":"autonomous",
+ "verdict":<span style="color: #ff5f5a;">"deny"</span>}</pre>
+          </div>
+
+          <div style="border: 1px solid #1e2235; background: #08090d;">
+            <div style="display: flex; justify-content: space-between; padding: .6rem .9rem; border-bottom: 1px solid #14171f; font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .16em; text-transform: uppercase; color: #4d5570;">
+              <span>authority block</span>
+              <span>on every event, not only privileged ones</span>
+            </div>
+            <pre style="margin: 0; padding: 1rem; overflow-x: auto; font-family: var(--font-mono, monospace); font-size: .72rem; line-height: 1.7; color: #9aa3bd;">{"profile":"laptop",
+ "policy_version":"sha256:b1d79eab…",
+ "instruction_version":"sha256:e087ac11…",
+ "settings_hash":"sha256:5a22b9dd…",
+ "permission_mode":"bypassPermissions",
+ "diverged":<span style="color: #e0a13a;">["host_permissions.permission_mode"]</span>}</pre>
+          </div>
+
+          <p style="margin: 0; color: #6b7291; font-size: .85rem; line-height: 1.65; text-wrap: pretty;">That last pair is worth slowing down on. This run happened inside a session running in bypass mode while the tracked settings declare no default mode. The two disagree, and the event says so, on the event, at the time. Outside such a session the field reads <span style="font-family: var(--font-mono, monospace); color: #9aa3bd;">"unobserved"</span> and nothing is reported as diverged, because an absent signal is written down rather than guessed into a value.</p>
+        </div>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border: 1px solid #1e2235; background: #0d0e12; padding: clamp(1.4rem, 3vw, 2.25rem); display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(1.5rem, 3vw, 2.5rem); align-items: center;">
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .8rem;">Inclusion proof</div>
+          <h3 style="margin: 0 0 .8rem; font-family: var(--font-display, sans-serif); font-weight: 600; letter-spacing: -.025em; font-size: clamp(1.1rem, 2vw, 1.4rem); color: #f0f2f8;">1,673 bytes, no ledger directory, no network.</h3>
+          <p style="margin: 0 0 1rem; color: #9aa3bd; font-size: .89rem; line-height: 1.65; text-wrap: pretty;">Export one event as a bundle and check it somewhere else: one envelope, its index, a three-element proof and one signed head. That is the whole evidence package for “this decision was on the log, in this position, at this size.”</p>
+          <pre style="margin: 0; font-family: var(--font-mono, monospace); font-size: .72rem; line-height: 1.8; color: #6b7291; overflow-x: auto;"><span style="color: #2b7fe8;">$</span> gantry ledger prove /tmp/demo/ledger 4 &gt; bundle.json
+<span style="color: #2b7fe8;">$</span> gantry ledger verify-inclusion bundle.json ledger.pub
+inclusion verified: entry 4 under signed head size 15</pre>
+        </div>
+        <svg viewBox="0 0 420 220" style="width: 100%; height: auto; font-family: var(--font-mono, monospace);" data-om-raster>
+          <line x1="210" y1="46" x2="110" y2="96" stroke="#294067" stroke-width="1"></line>
+          <line x1="210" y1="46" x2="310" y2="96" stroke="#2b7fe8" stroke-width="1.4"></line>
+          <line x1="110" y1="96" x2="60" y2="146" stroke="#1e2235" stroke-width="1"></line>
+          <line x1="110" y1="96" x2="160" y2="146" stroke="#1e2235" stroke-width="1"></line>
+          <line x1="310" y1="96" x2="260" y2="146" stroke="#2b7fe8" stroke-width="1.4"></line>
+          <line x1="310" y1="96" x2="360" y2="146" stroke="#294067" stroke-width="1"></line>
+          <circle cx="210" cy="46" r="9" fill="#0f1830" stroke="#2b7fe8" stroke-width="1.4"></circle>
+          <circle cx="110" cy="96" r="7" fill="#131520" stroke="#294067"></circle>
+          <circle cx="310" cy="96" r="7" fill="#0f1830" stroke="#2b7fe8" style="animation: g-pulse 2.4s ease-in-out infinite;"></circle>
+          <circle cx="60" cy="146" r="6" fill="#131520" stroke="#1e2235"></circle>
+          <circle cx="160" cy="146" r="6" fill="#131520" stroke="#294067" style="animation: g-pulse 2.4s ease-in-out .3s infinite;"></circle>
+          <rect x="250" y="136" width="20" height="20" rx="2" fill="#2b7fe8"></rect>
+          <circle cx="360" cy="146" r="6" fill="#131520" stroke="#294067" style="animation: g-pulse 2.4s ease-in-out .6s infinite;"></circle>
+          <text x="228" y="42" fill="#9aa3bd" font-size="10">signed head · size 15</text>
+          <text x="252" y="180" fill="#f0f2f8" font-size="10">entry 4</text>
+          <text x="252" y="196" fill="#6b7291" font-size="9">the event you export</text>
+          <text x="30" y="196" fill="#6b7291" font-size="9">the rest of the log</text>
+          <text x="30" y="180" fill="#4d5570" font-size="9">not needed</text>
+          <text x="330" y="120" fill="#2b7fe8" font-size="9">proof path</text>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <section id="primitives" data-screen-label="Twelve primitives" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(2rem, 4vw, 3rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(1.5rem, 3vw, 2.5rem); align-items: end;">
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">The twelve primitives</div>
+          <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 28ch;">The overall level is the minimum, never the average.</h2>
+          <p style="margin: 0; max-width: 60ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">One missing layer is what an attacker or an auditor finds. Nine strong layers and no record of what happened is a weak system. Layers 10, 11 and 12 are the trust layers, the ones nobody builds, and because the score is a minimum they are usually the ones setting it.</p>
+        </div>
+        <div style="display: flex; gap: 2rem; align-items: flex-end;">
+          <div>
+            <div style="font-family: var(--font-display, sans-serif); font-weight: 700; font-size: clamp(3.5rem, 8vw, 5.5rem); line-height: .9; letter-spacing: -.05em; color: #2b7fe8;">3</div>
+            <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-top: .5rem;">Overall level, Gantry scored by Gantry</div>
+          </div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .72rem; color: #6b7291; line-height: 1.7; padding-bottom: .4rem;">six layers at 4<br>six layers at 3<br><span style="color: #9aa3bd;">the minimum is the honest figure</span></div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1px; background: #1e2235; border: 1px solid #1e2235;">
+        <div style="background: #0b0c10; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px;">
+          <sc-for list="{{ prims }}" as="p" hint-placeholder-count="12">
+            <button onClick="{{ p.pick }}" style="all: unset; cursor: pointer; padding: .95rem 1rem; background: {{ p.bg }}; border-top: 2px solid {{ p.bar }}; display: flex; flex-direction: column; gap: .45rem; transition: background 160ms;" style-hover="background: #12141c;">
+              <span style="font-family: var(--font-mono, monospace); font-size: .6rem; letter-spacing: .14em; color: #6b7291;">{{ p.n }}</span>
+              <span style="font-family: var(--font-display, sans-serif); font-size: .84rem; font-weight: 500; letter-spacing: -.01em; color: {{ p.color }}; line-height: 1.25;">{{ p.layer }}</span>
+              <span style="font-family: var(--font-mono, monospace); font-size: .68rem; color: {{ p.scoreColor }};">{{ p.score }}</span>
+            </button>
+          </sc-for>
+        </div>
+        <div style="background: #0d0e12; padding: clamp(1.4rem, 3vw, 2.25rem); display: flex; flex-direction: column; gap: 1.2rem;">
+          <div style="display: flex; align-items: baseline; gap: .8rem;">
+            <span style="font-family: var(--font-mono, monospace); font-size: .7rem; color: #2b7fe8;">{{ prim.n }}</span>
+            <span style="font-family: var(--font-display, sans-serif); font-weight: 600; letter-spacing: -.025em; font-size: clamp(1.2rem, 2.2vw, 1.6rem); color: #f0f2f8;">{{ prim.layer }}</span>
+          </div>
+          <div>
+            <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .4rem;">What it means</div>
+            <p style="margin: 0; color: #f0f2f8; font-size: .92rem; line-height: 1.6; text-wrap: pretty;">{{ prim.means }}</p>
+          </div>
+          <div>
+            <div style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .4rem;">What goes wrong without it</div>
+            <p style="margin: 0; color: #9aa3bd; font-size: .89rem; line-height: 1.6; text-wrap: pretty;">{{ prim.wrong }}</p>
+          </div>
+          <div style="border-top: 1px solid #1e2235; padding-top: 1.2rem;">
+            <div style="display: flex; align-items: center; gap: .7rem; margin-bottom: .6rem;">
+              <span style="font-family: var(--font-mono, monospace); font-size: .55rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291;">Gantry scores</span>
+              <span style="font-family: var(--font-display, sans-serif); font-weight: 700; font-size: 1.1rem; color: #2b7fe8;">{{ prim.score }}</span>
+              <span style="display: flex; gap: 3px;">
+                <sc-for list="{{ prim.pips }}" as="pip" hint-placeholder-count="5">
+                  <span style="width: 16px; height: 4px; background: {{ pip.c }};"></span>
+                </sc-for>
+              </span>
+            </div>
+            <p style="margin: 0; color: #9aa3bd; font-size: .86rem; line-height: 1.6; text-wrap: pretty;">{{ prim.why }}</p>
+          </div>
+        </div>
+      </div>
+
+      <p data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; margin: 0; max-width: 72ch; color: #6b7291; font-size: .86rem; line-height: 1.7; text-wrap: pretty;">The table is produced by <span style="font-family: var(--font-mono, monospace); color: #9aa3bd;">gantry score</span> reading a ledger that exercised the layers, not by reading a file. The scoring rules are data, so anyone holding an exported ledger re-derives the same twelve numbers without trusting the binary. Adding a scoring rule alone changes nothing, because the scorer reads telemetry: the number follows the record, including when the record is disappointing.</p>
+    </div>
+  </section>
+
+  <section id="console" data-screen-label="Console" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235; background: #0b0c10;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(1.75rem, 3.5vw, 2.5rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">The console</div>
+        <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 32ch;">Six views over the ledger you just verified.</h2>
+        <p style="margin: 0; max-width: 64ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">Served by the same binary from the same process. No second service, no build step, no package manager: the assets are hand-written HTML, CSS and ES modules embedded at compile time, and the logo travels as a data URI. Nothing is fetched from any host, which is what lets the air-gap claim survive having a UI at all.</p>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; border: 1px solid #1e2235; background: #0d0e12;">
+        <div style="display: flex; flex-wrap: wrap; gap: 1px; background: #1e2235;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+            <button onClick="{{ t.pick }}" style="all: unset; cursor: pointer; flex: 1 1 160px; padding: .85rem 1rem; background: {{ t.bg }}; font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; color: {{ t.color }}; text-align: center; transition: background 160ms;" style-hover="background: #12141c;">{{ t.label }}</button>
+          </sc-for>
+        </div>
+        <div style="padding: clamp(1rem, 2.5vw, 1.75rem); display: flex; flex-direction: column; gap: 1rem;">
+          <sc-if value="{{ tab0 }}" hint-placeholder-val="{{ true }}">
+            <img src="assets/console-overview.png" alt="Console overview" style="width: 100%; height: auto; display: block; border: 1px solid #1e2235;">
+          </sc-if>
+          <sc-if value="{{ tab1 }}" hint-placeholder-val="{{ false }}">
+            <img src="assets/console-ledger.png" alt="Console ledger view" style="width: 100%; height: auto; display: block; border: 1px solid #1e2235;">
+          </sc-if>
+          <sc-if value="{{ tab2 }}" hint-placeholder-val="{{ false }}">
+            <img src="assets/console-tampered.png" alt="The console refusing to render a tampered ledger" style="width: 100%; height: auto; display: block; border: 1px solid #1e2235;">
+          </sc-if>
+          <p style="margin: 0; color: #9aa3bd; font-size: .88rem; line-height: 1.6; max-width: 78ch; text-wrap: pretty;">{{ tab.caption }}</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: #1e2235; border: 1px solid #1e2235;">
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="6">
+          <div style="background: #0d0e12; padding: 1.25rem 1.4rem; display: flex; flex-direction: column; gap: .5rem;">
+            <div style="font-family: var(--font-display, sans-serif); font-weight: 600; font-size: .95rem; color: #f0f2f8; letter-spacing: -.01em;">{{ v.name }}</div>
+            <div style="color: #6b7291; font-size: .84rem; line-height: 1.55; text-wrap: pretty;">{{ v.what }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <p data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; margin: 0; max-width: 72ch; color: #6b7291; font-size: .86rem; line-height: 1.7; text-wrap: pretty;">The API is read-only by decision. It cannot approve, promote, demote or append, because a UI that can move a rung is an authority surface and the laptop profile has no identity story for one. It binds loopback by default. Not built yet: no approval inbox, no inclusion-proof view, no sensor board, no anchoring view. Live update is a poll, not a stream.</p>
+    </div>
+  </section>
+
+  <section data-screen-label="What runs today" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(2rem, 4vw, 3rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">What runs today</div>
+        <h2 style="margin: 0; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 30ch;">Built, not described.</h2>
+      </div>
+      <div style="display: flex; flex-direction: column;">
+        <sc-for list="{{ modules }}" as="m" hint-placeholder-count="10">
+          <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: clamp(1rem, 3vw, 2.5rem); padding: 1.4rem 0; border-top: 1px solid #1e2235; transition: border-color 200ms;" style-hover="border-color: rgba(43,127,232,.3);">
+            <div style="display: flex; flex-direction: column; gap: .35rem;">
+              <span style="font-family: var(--font-display, sans-serif); font-weight: 600; font-size: 1.02rem; letter-spacing: -.02em; color: #f0f2f8;">{{ m.name }}</span>
+              <span style="font-family: var(--font-mono, monospace); font-size: .68rem; color: #2b7fe8;">{{ m.file }}</span>
+            </div>
+            <p style="margin: 0; color: #9aa3bd; font-size: .9rem; line-height: 1.65; text-wrap: pretty;">{{ m.what }}</p>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Profiles and honesty" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235; background: #0b0c10;">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: clamp(1.75rem, 3.5vw, 2.5rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">How strictness is selected</div>
+        <h2 style="margin: 0 0 1rem; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.08; font-size: clamp(1.8rem, 3.6vw, 2.9rem); max-width: 32ch;">One profile sets isolation, identity, ledger and autonomy together.</h2>
+        <p style="margin: 0; max-width: 62ch; color: #9aa3bd; line-height: 1.65; font-size: .95rem; text-wrap: pretty;">Only <span style="font-family: var(--font-mono, monospace); color: #f0f2f8;">laptop</span> runs. It is what the tracked policy declares, what the template ships, and what every proof document exercises. The other two rows are the design.</p>
+      </div>
+
+      <div style="border: 1px solid #1e2235; overflow-x: auto;">
+        <div style="min-width: 720px;">
+          <div style="display: grid; grid-template-columns: 1.1fr 1.4fr 1.2fr 1.6fr 1.4fr; gap: 1rem; padding: .9rem 1.2rem; background: #0d0e12; border-bottom: 1px solid #1e2235; font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291;">
+            <span>Profile</span><span>Isolation</span><span>Identity</span><span>Ledger</span><span>Default rung</span>
+          </div>
+          <sc-for list="{{ profiles }}" as="p" hint-placeholder-count="3">
+            <div style="display: grid; grid-template-columns: 1.1fr 1.4fr 1.2fr 1.6fr 1.4fr; gap: 1rem; padding: 1.1rem 1.2rem; border-bottom: 1px solid #14171f; font-size: .84rem; color: {{ p.color }}; align-items: baseline; background: {{ p.bg }};">
+              <span style="font-family: var(--font-mono, monospace); font-size: .8rem; color: {{ p.nameColor }};">{{ p.name }}</span>
+              <span>{{ p.isolation }}</span><span>{{ p.identity }}</span><span>{{ p.ledger }}</span><span>{{ p.rung }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: clamp(1.5rem, 3vw, 2.5rem);">
+        <div style="border-left: 2px solid #e0a13a; padding-left: 1.3rem;">
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #e0a13a; margin-bottom: .6rem;">What an hour does not get you</div>
+          <p style="margin: 0; color: #9aa3bd; font-size: .89rem; line-height: 1.65; text-wrap: pretty;">No anchored head, no drift report over the whole profile, and no isolation backend other than seatbelt, because none of those is built. The glossary ends with the full list of terms that are declared and not yet running, and each proof document closes with its own section on what is still a guide.</p>
+        </div>
+        <div style="border-left: 2px solid #2b7fe8; padding-left: 1.3rem;">
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #2b7fe8; margin-bottom: .6rem;">What keeps it honest</div>
+          <p style="margin: 0; color: #9aa3bd; font-size: .89rem; line-height: 1.65; text-wrap: pretty;">The scorer reads what is running and never the profile name. Seatbelt scores 4 on execution environment from a sandbox field observed on every tool request, not from the policy's own claim; a host with no <span style="font-family: var(--font-mono, monospace); color: #f0f2f8;">sandbox-exec</span> records <span style="font-family: var(--font-mono, monospace); color: #f0f2f8;">none</span> and the isolation claim is honestly unmet rather than silently bypassed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Start here" style="position: relative; padding: clamp(4rem, 9vw, 7rem) clamp(1.5rem, 5vw, 4rem); border-top: 1px solid #1e2235;">
+    <div style="max-width: 72rem; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: clamp(2rem, 4vw, 3.5rem);">
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; display: flex; flex-direction: column; gap: 1.4rem;">
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1rem;">Start a harness of your own</div>
+          <h2 style="margin: 0; font-family: var(--font-display, sans-serif); font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-size: clamp(1.6rem, 3vw, 2.3rem);">One command writes the whole layout, sensors included.</h2>
+        </div>
+        <pre style="margin: 0; padding: 1.1rem; background: #08090d; border: 1px solid #1e2235; overflow-x: auto; font-family: var(--font-mono, monospace); font-size: .74rem; line-height: 1.85; color: #9aa3bd;"><span style="color: #2b7fe8;">$</span> gantry template init templates/laptop ~/my-harness
+template validates: profile laptop, 5 capabilities,
+8 rules, 3 providers, 12 scoring rules, 2 sensors
+wrote config/policy.json
+wrote config/providers.json
+wrote config/scoring.json
+wrote instructions/pack.md
+wrote config/sensors/…
+wrote config/actor-key.seed (mode 0600)
+harness initialised, signing as <span style="color: #f0f2f8;">ed25519:86c50d22…</span></pre>
+        <p style="margin: 0; color: #6b7291; font-size: .86rem; line-height: 1.65; text-wrap: pretty;">The signing key is generated per install from OS entropy, so no two harnesses share an identity and the template ships no key material at all. The bundle validates as a whole before a single file is copied, so a refused init leaves no half-written harness.</p>
+        <div style="border-top: 1px solid #1e2235; padding-top: 1.4rem;">
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .7rem;">Building</div>
+          <pre style="margin: 0; font-family: var(--font-mono, monospace); font-size: .74rem; line-height: 1.9; color: #9aa3bd;">cargo build
+cargo test
+zsh ci/run.sh   <span style="color: #4d5570;"># fmt, clippy as errors, offline suite,</span>
+                <span style="color: #4d5570;"># policy parity, sensor liveness</span></pre>
+        </div>
+      </div>
+
+      <div data-rise style="animation: g-rise .7s cubic-bezier(.23,1,.32,1) both; animation-play-state: paused; animation-delay: .12s;">
+        <div style="font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .18em; text-transform: uppercase; color: #6b7291; margin-bottom: 1.2rem;">Where to read next</div>
+        <div style="display: flex; flex-direction: column;">
+          <sc-for list="{{ docs }}" as="d" hint-placeholder-count="8">
+            <a href="{{ d.href }}" style="display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr); gap: 1rem; padding: .9rem 0; border-top: 1px solid #1e2235; color: #9aa3bd; transition: border-color 200ms;" style-hover="border-color: rgba(43,127,232,.35); color: #f0f2f8;">
+              <span style="font-family: var(--font-mono, monospace); font-size: .74rem; color: #2b7fe8;">{{ d.file }}</span>
+              <span style="font-size: .86rem; line-height: 1.55;">{{ d.what }}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="position: relative; border-top: 1px solid #1e2235; background: #131520; padding: clamp(3rem, 6vw, 4.5rem) clamp(1.5rem, 5vw, 4rem) clamp(2rem, 4vw, 3rem);">
+    <div style="max-width: 72rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2rem;">
+        <div style="display: flex; flex-direction: column; gap: .9rem;">
+          <img src="assets/logo.png" alt="Gantry" style="height: 42px; width: auto; align-self: flex-start; filter: brightness(1.5) saturate(1.05);">
+          <p style="margin: 0; color: #6b7291; font-size: .86rem; line-height: 1.65; max-width: 42ch;">Not an agent framework, not a chat product, not an eval platform, not a skills marketplace, not a compliance certification. It produces evidence. Interpreting that evidence against a regime is a separate job.</p>
+        </div>
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .8rem;">Attribution</div>
+          <p style="margin: 0; color: #9aa3bd; font-size: .84rem; line-height: 1.65;">Two sources are load-bearing: the twelve-primitive decomposition of an agent harness, and Birgitta Böckeler's guide and sensor taxonomy (martinfowler.com, April 2026), which is where the distinction between a rule that advises and a check that fires comes from.</p>
+        </div>
+        <div>
+          <div style="font-family: var(--font-mono, monospace); font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: #6b7291; margin-bottom: .8rem;">Licence &amp; status</div>
+          <p style="margin: 0; color: #9aa3bd; font-size: .84rem; line-height: 1.65;">Apache License 2.0 — Apache rather than MIT because this is a security control plane meant to be embedded in other people's stacks, and Apache carries an explicit patent grant. Pre-1.0: proofs 00 through 13 ship, the API is not yet stable.</p>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 1.2rem; justify-content: space-between; padding-top: 1.5rem; border-top: 1px solid #1e2235; font-family: var(--font-mono, monospace); font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: #4d5570;">
+        <span>Copyright Mariano215</span>
+        <a href="https://github.com/Mariano215/gantry" style="color: #6b7291;">github.com/Mariano215/gantry →</a>
+      </div>
+    </div>
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;autoplayDemo&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;demoSpeed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:3,&quot;min&quot;:1,&quot;max&quot;:8,&quot;step&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Demo&quot;,&quot;unit&quot;:&quot;chars/tick&quot;}}">
+class Component extends DCLogic {
+  canvasRef = React.createRef();
+  termRef = React.createRef();
+  state = { step: 0, typed: 0, out: 0, hold: 0, playing: false, sim: 3, prim: 11, tab: 0 };
+
+  STEPS = [
+    {
+      label: 'Build it and make a ledger',
+      cmd: 'cargo build && ./target/debug/gantry ledger init /tmp/demo/ledger',
+      out: [{ t: 'ledger initialised at /tmp/demo/ledger', c: '#9aa3bd' }],
+      note: 'A directory holding an append-only event log, its signed tree heads, the payloads, and the ledger\u2019s own signing key. Nothing else needs to be running: no daemon, no database, no account.'
+    },
+    {
+      label: 'The first denial',
+      cmd: 'gantry broker call /tmp/demo/ledger Bash "rm -rf /"',
+      out: [
+        { t: 'policy denied Bash on rm -rf /: rule r-destructive-shell fired and the', c: '#ff5f5a' },
+        { t: 'decision is on the ledger. Fix: This command is destructive and its', c: '#ff5f5a' },
+        { t: 'capability\u2019s rollback handle cannot recall it. Scope the deletion to a path', c: '#ff5f5a' },
+        { t: 'the run owns, or route it through a capability whose rollback genuinely', c: '#ff5f5a' },
+        { t: 'covers it.', c: '#ff5f5a' },
+        { t: 'refusal recorded (ledger sealed at size 8)', c: '#6b7291' },
+        { t: 'exit status 1', c: '#6b7291' }
+      ],
+      note: 'The refusal names the rule that produced it, so you can read the reason rather than guess it. It names the action to take, because the reader is usually an agent and \u201cdenied\u201d is not something an agent can act on. And the decision is an event on the log before the process exits, so a denial is a thing that happened rather than an absence you infer later.'
+    },
+    {
+      label: 'A call that runs',
+      cmd: 'gantry broker call /tmp/demo/ledger Read docs/PLAN.md',
+      out: [
+        { t: '... file contents ...', c: '#9aa3bd' },
+        { t: '[taint: true] (ledger sealed at size 15)', c: '#2b7fe8' }
+      ],
+      note: 'It ran inside a per-run sandbox with the network denied and writes scoped to a scratch directory, and the result came back marked tainted, which means it is data and not instruction.'
+    },
+    {
+      label: 'Check the record yourself',
+      cmd: 'gantry ledger verify /tmp/demo/ledger',
+      out: [
+        { t: 'entries: 15', c: '#f0f2f8' },
+        { t: 'attestations verified against config/actor-keys.json: 15', c: '#f0f2f8' },
+        { t: 'of those, 15 were signed under a key whose seed is published, so they', c: '#6b7291' },
+        { t: 'prove which run wrote the event and not who operated it; a deployment', c: '#6b7291' },
+        { t: 'registers its own key and keeps the seed', c: '#6b7291' }
+      ],
+      note: 'Verification is a local command. It walks the hash chain, recomputes the Merkle tree against every signed head, checks that no tail of the log is uncovered, confirms every payload is present or lawfully expired, and checks each attestation against the registered keys. The laptop profile publishes its seed, so the tool says provenance rather than printing the line an HSM-backed deployment would print.'
+    },
+    {
+      label: 'What a tampered log looks like',
+      cmd: 'gantry ledger verify /tmp/demo/tampered',
+      out: [
+        { t: 'entries: 15', c: '#f0f2f8' },
+        { t: 'attestations verified against config/actor-keys.json: 14', c: '#e0a13a' },
+        { t: 'entry 4: chain diverges between entry 4 and entry 5', c: '#ff5f5a' },
+        { t: '  Fix: entry 4 was altered after append; restore it from a replica', c: '#a8737a' },
+        { t: 'entry 4: Merkle root diverges first at tree size 5', c: '#ff5f5a' },
+        { t: '  Fix: restore entry 4 from a replica and re-verify', c: '#a8737a' },
+        { t: 'entry 4: carries an attestation under registered key ed25519:407d778d…', c: '#ff5f5a' },
+        { t: '  that does not verify. Fix: the envelope was altered after signing, or', c: '#a8737a' },
+        { t: '  the attestation was forged; restore the entry or revoke the key', c: '#a8737a' },
+        { t: 'exit status 1', c: '#6b7291' }
+      ],
+      note: 'Copy the ledger, change one character of one timestamp, and verify again. One edit, three independent detections, each naming the entry and what to do.'
+    },
+    {
+      label: 'Score what just happened',
+      cmd: 'gantry score /tmp/demo/ledger',
+      out: [
+        { t: '| Primitive               | Score | Evidence                          |', c: '#4d5570' },
+        { t: '| 01 Instruction          |   3   | pack version-pinned on every run  |', c: '#9aa3bd' },
+        { t: '| 02 Context delivery     |  N/A  | no telemetry in this ledger       |', c: '#6b7291' },
+        { t: '| 04 Tool interface       |   4   | tool results carry taint          |', c: '#9aa3bd' },
+        { t: '| 05 Execution env        |   4   | seatbelt sandbox, per request     |', c: '#9aa3bd' },
+        { t: '| 11 Observability        |   3   | one chokepoint onto the ledger    |', c: '#9aa3bd' },
+        { t: '| 12 Governance           |   3   | authority-as-code, named denial   |', c: '#9aa3bd' },
+        { t: '| … seven layers unexercised, reported N/A …                          |', c: '#6b7291' },
+        { t: 'Overall level: 3 — the minimum across 5 scored primitives, not the average', c: '#2b7fe8' }
+      ],
+      note: 'The N/A rows are the point. Those seven layers were never exercised in this ledger, so they are reported as unmeasured rather than assumed fine. Scoring is itself an event, so the entry count grows each time you run it.'
+    }
+  ];
+
+  QUESTIONS = [
+    { n: '01', q: 'What did the agent actually do last Tuesday?', a: 'Not the chat transcript. Which tools it called, with what arguments, under what policy version, approved by whom.' },
+    { n: '02', q: 'What stopped it from doing worse?', a: 'If the answer is \u201cthe prompt told it not to,\u201d you have a suggestion, not a control.' },
+    { n: '03', q: 'Can someone who was not in the room verify any of that?', a: 'Logs you can edit prove nothing about a system you operate.' }
+  ];
+
+  CONCEPTS = [
+    { title: 'Verdict', vals: 'allow · hold · deny', body: 'The outcome of one evaluation. Exactly one policy.decision event is written per call, whichever it is. A denial is never inferred from a missing allow, and a hold does not execute until an approval releases it.', edge: 'The decision event still reads hold after the approval, because that is what the policy computed. The release is a separate approval.use. Read the ledger top to bottom and it says: held, approved, spent, ran.' },
+    { title: 'Taint', vals: 'tool output is data, not instruction', body: 'Every tool result comes back marked. A file the agent read is untrusted content that happens to be in the window, not a new set of orders, and the mark travels on the result event.', edge: 'Secrets never cross this line either: agents hold handles, and the broker substitutes the real value into the child process environment at the boundary, never into a prompt, a command string or an event.' },
+    { title: 'Rung', vals: 'led · assisted · autonomous', body: 'How much autonomy a capability currently holds, and therefore where the human stands. Sensors decide it. Promotion needs clean runs at the current rung and a named approver; demotion is automatic on failure and needs no meeting.', edge: 'The asymmetry is deliberate: earning authority takes a signature, losing it takes a failure. The broker gates on the rung replayed from the ledger, not the declared one, so a recorded demotion tightens the gate on the very next call.' },
+    { title: 'Gate placement', vals: 'pre · post · none', body: 'Derived from the rung and the effect class rather than written by the rule author. Irreversible is pre at every rung including autonomous, because autonomous means post-hoc review with rollback and there is no rollback for an unrecallable act.', edge: 'A capability that resolves to post with no rollback handle refuses to load, and at runtime a gate that would become post without one degrades to pre instead.' }
+  ];
+
+  SIMS = [
+    { cmd: 'Read docs/PLAN.md', verdict: 'allow', rule: 'r-read-repo', capability: 'repo.read', effect: 'read', rung: 'autonomous', gate: 'none', message: 'Runs inside a per-run sandbox with the network denied. The result comes back with taint: true.', after: 'tool.request, policy.decision and tool.result all land on the ledger, with the result hash, the taint mark and the duration.' },
+    { cmd: 'Read .env', verdict: 'deny', rule: 'r-credential-file', capability: 'repo.read', effect: 'read', rung: 'autonomous', gate: 'none', message: 'Reading a credential file is denied. Ask the broker for a handle and pass the handle name; the broker substitutes the value at the tool boundary.', after: 'The model never sees the secret at any point. The handle name is what appears on the event.' },
+    { cmd: 'Bash "rm -rf /"', verdict: 'deny', rule: 'r-destructive-shell', capability: 'shell.exec', effect: 'write.local', rung: 'autonomous', gate: 'post', message: 'This command is destructive and its capability\u2019s rollback handle cannot recall it. Scope the deletion to a path the run owns, or route it through a capability whose rollback genuinely covers it.', after: 'The denial costs the capability a rung. A rung.change event sits between the decision and the result.' },
+    { cmd: 'Bash "git push origin main"', verdict: 'hold', rule: 'r-publish', capability: 'vcs.publish', effect: 'irreversible', rung: 'led', gate: 'pre', message: 'Rule r-publish gates this call pre and no approval on this ledger releases it. The decision carries obligation: approval — a human has to answer before the call runs.', after: 'gantry approve <ledger> <request-id> user:you@example.com records the answer, and the next attempt spends it. Approve and refuse earn the same score, because a refusal is the gate working.' },
+    { cmd: 'Bash "curl https://api.example.com"', verdict: 'deny', rule: 'r-egress-laptop', capability: 'net.egress', effect: 'irreversible', rung: 'led', gate: 'pre', message: 'Egress is denied on the laptop profile, whose allowlist is empty. Add the host to profile_requirements.egress.allow and re-run, or perform this lookup outside the run and paste the result.', after: 'Egress is classified irreversible: a byte that has left cannot be unsent, and that one classification is what makes the gate table safe.' },
+    { cmd: 'Terraform apply', verdict: 'deny', rule: 'r-default', capability: '—', effect: '—', rung: '—', gate: 'pre', message: 'No capability declares this tool. Add it to a capability in config/policy.json with an effect class and a rung, then re-run.', after: 'The default is deny, and it is a rule like any other, so the refusal still names itself. A deny rule shadowed by an earlier allow refuses to load rather than sitting there unreachable.' }
+  ];
+
+  SPINE = [
+    { kind: 'run.open', what: 'the profile, the instruction pack hash, the settings hash' },
+    { kind: 'tool.register', what: 'each built-in tool accepted against its declared schema' },
+    { kind: 'tool.register', what: 'a loose tool definition is refused rather than registered' },
+    { kind: 'tool.request', what: 'tool, canonical args, sandbox backend, credential handles' },
+    { kind: 'policy.decision', what: 'exactly one per call, allow / hold / deny, naming its rule', accent: true },
+    { kind: 'rung.change', what: 'only on the denied run: a denial costs the capability a rung', warn: true },
+    { kind: 'tool.result', what: 'outcome, result hash, taint, duration' },
+    { kind: 'run.seal', what: 'outcome and the signed tree head at seal' }
+  ];
+
+  PRIMS = [
+    { n: '01', layer: 'Instruction', score: 4, means: 'Who the agent is and the rules it works under, kept in version control like code.', wrong: 'Prompts edited live in a dashboard. Nobody can say what the agent was told last week.', why: 'The instruction-lifecycle sensor gates the pack against a review record. The level is earned by the control running, never by it failing.' },
+    { n: '02', layer: 'Context delivery', score: 3, means: 'Actually handing the model the file, the failing test, the stack trace.', wrong: 'The agent is asked about a system it was never shown, and the hallucination gets blamed on the model.', why: 'Normalised model.call events with a pinned prompt hash.' },
+    { n: '03', layer: 'Context management', score: 3, means: 'Choosing what enters the window right now, against a budget, with stale material expired.', wrong: 'Whole wikis stuffed into every prompt. Wrong context is worse than none: a plausible distraction that fails confidently.', why: 'Window budget and actual recorded per call; graph retrieval ledgered with its byte cost and staleness re-reads.' },
+    { n: '04', layer: 'Tool interface', score: 4, means: 'Structured calls with names, schemas and validated inputs, and tool output treated as untrusted.', wrong: 'A tool called \u201crun any shell command,\u201d and its output piped straight into the next decision.', why: 'MCP-shaped registry, taint on every result.' },
+    { n: '05', layer: 'Execution environment', score: 4, means: 'Where commands run and with what access: sandbox, filesystem scope, network rules, credentials.', wrong: 'The agent runs with a developer\u2019s full credentials on their laptop. This is a security finding, not a maturity gap.', why: 'Commands run inside a seatbelt sandbox, recorded per request.' },
+    { n: '06', layer: 'Durable state', score: 3, means: 'The workbench that survives a crash: plans, checkpoints, task state, a graph of the codebase.', wrong: 'Everything lives in the conversation. Every session restarts from zero.', why: 'A run resumed from a checkpoint: the seam is on the record.' },
+    { n: '07', layer: 'Orchestration', score: 4, means: 'How work moves: retries, gates, approvals, escalation, step ordering.', wrong: 'One loop that either succeeds or dies. A human finds out from the output, or never.', why: 'A human gate ran at an irreversible step: the policy held the call, and a human answered it on the record. Approve and refuse earn the same level, because a refusal is the gate working.' },
+    { n: '08', layer: 'Sub-agents', score: 3, means: 'Splitting work into specialists with narrow scope, narrow context and narrow tools.', wrong: 'Either one agent does everything, or a swarm exists for show with no consistency.', why: 'A delegated run records subagent.spawn, and the chokepoint denies an out-of-grant call with rule r-delegation.' },
+    { n: '09', layer: 'Skills', score: 3, means: 'Reusable procedures loaded at the right moment, with steps and tools named.', wrong: 'The process lives in one person\u2019s head or one old thread.', why: 'Signed packages resolved against the managed key registry or refused; resolved steps execute through the broker under the delegated grant.' },
+    { n: '10', layer: 'Verification', score: 4, means: 'The agent says done, the harness says show me: tests, builds, type checks, evals.', wrong: 'The final sentence is trusted because it sounds confident. The most common and most silent failure in the field.', why: 'A sensor that could not fail was reported broken, not clean.' },
+    { n: '11', layer: 'Observability', score: 3, means: 'The recorder: tool timelines, cost, prompt versions, approvals, replayable.', wrong: 'Service-uptime monitoring mistaken for agent observability. Nobody can reconstruct the run.', why: 'Requests, decisions and results all flow through the chokepoint onto the signed ledger.' },
+    { n: '12', layer: 'Governance', score: 4, means: 'Who the agent acts as, what it may do, under which policy, and the record that proves it.', wrong: 'The authority is real but undeclared, inherited from whoever set up the machine, and nothing reports when the running system drifts from the stated policy.', why: 'Authority-as-code produced a named denial; the drift walk reported every profile requirement, and run open recorded what this machine could not provide. The level is the walk having run, not what it found.' }
+  ];
+
+  TABS = [
+    { label: 'Overview', src: 'assets/console-overview.png', caption: 'The overall level, the twelve primitives with the evidence sentence behind each number, event volume, the signed tree head, and how many events carry an attestation.' },
+    { label: 'Ledger', src: 'assets/console-ledger.png', caption: 'The event stream with filters by kind, run, actor and time. Expand a row for its subject, authority block, attestation state and position in the tree.' },
+    { label: 'A tampered ledger', src: 'assets/console-tampered.png', caption: 'Alter one event and the console does not show a dashboard with a warning badge — the failure takes over. Three faults named, the exact offline command that reaches the same verdict without the server, and a banner that cannot be dismissed for the rest of the session.' }
+  ];
+
+  VIEWS = [
+    { name: 'Overview', what: 'Overall level, the twelve primitives, event volume, signed head, attestation coverage.' },
+    { name: 'Ledger', what: 'The event stream, filtered by kind, run, actor and time.' },
+    { name: 'Run', what: 'One run as a waterfall: model calls, tool requests, decisions, sandbox executions, sensor verdicts, denial reasons inline. An incident review reads this and nothing else.' },
+    { name: 'Policy', what: 'Every rule with its decision, message and how many times it fired. A rule that never fires is shown, not hidden.' },
+    { name: 'Trust', what: 'Each capability\u2019s declared rung against the rung it earned from replay, and which one the broker actually gates on.' },
+    { name: 'Verify', what: 'The verification result and the offline command that reproduces it without the server.' }
+  ];
+
+  MODULES = [
+    { name: 'Evidence ledger', file: 'src/ledger.rs', what: 'Append-only Merkle log, RFC 6962 construction, signed tree heads, offline inclusion and consistency proofs. Nothing is trusted that is not on this record. Actor attestations verify against a registered key or are counted as unverified, never assumed.' },
+    { name: 'Model gateway', file: 'src/gateway.rs', what: 'The one chokepoint every model call passes, normalising across providers and pinning the instruction and policy version per call. A code path that reaches a provider SDK directly fails the build.' },
+    { name: 'Tool broker and policy engine', file: 'src/broker.rs · src/policy.rs', what: 'One policy decision per tool call, an MCP-shaped registry that refuses loose tool definitions, and denials that name their rule. A deny rule shadowed by an earlier allow refuses to load rather than sitting there unreachable.' },
+    { name: 'Sandbox and credential broker', file: 'src/sandbox.rs · src/secrets.rs', what: 'Per-run seatbelt isolation, network denied except an allowlist, and secrets the model never sees. Agents hold handles; the broker substitutes the real value into the child process environment at the boundary.' },
+    { name: 'Sensor bus', file: 'src/sensor.rs', what: 'Checks with lifecycle placement whose verdicts name the fix. Every sensor declares a negative control it must reject, so a sensor that has quietly stopped working is reported broken rather than clean. A green board of dead sensors is the failure mode this prevents.' },
+    { name: 'Orchestrator and trust budget', file: 'src/trust.rs', what: 'Every capability holds a rung that decides where the human stands. Rungs are earned by clean sensor history under a named approver and lost automatically on the next failure, and the current rung is replayed from the ledger rather than stored.' },
+    { name: 'Durable state and corpus graph', file: 'src/durable.rs · src/graph.rs', what: 'A killed run resumes from its last checkpoint; the graph answers questions about the codebase by reading a fraction of a flat scan, and reports the cases where it loses.' },
+    { name: 'Skills and delegation', file: 'src/skills.rs', what: 'Signed skill packages resolved against a managed key registry or refused. A package with broken metadata, a missing step or an unverifiable signature is refused at resolve time, never published on its title. Delegation can only narrow scope.' },
+    { name: 'Conformance scorer', file: 'src/scorer.rs', what: 'The rubric as a running service. Every predicate is a statement about ledger events, so it cannot be talked into a better number.' },
+    { name: 'Console and its API', file: 'src/console.rs · assets/', what: 'Eight read-only routes over the ledger and six views on top of them, served by the same binary from the same process, standard library only and no new dependency.' }
+  ];
+
+  PROFILES = [
+    { name: 'laptop', isolation: 'seatbelt, empty egress allowlist', identity: 'local accounts', ledger: 'local file', rung: 'autonomous, post-hoc review', live: true },
+    { name: 'team', isolation: 'kernel-level sandbox', identity: 'OIDC', ledger: 'anchored daily to object storage', rung: 'assisted', live: false },
+    { name: 'regulated', isolation: 'microVM', identity: 'OIDC required, no local fallback', ledger: 'HSM or TPM keys, external timestamping', rung: 'assisted, no promotion without a named approver', live: false }
+  ];
+
+  DOCS = [
+    { file: 'docs/GLOSSARY.md', what: 'Every term this project uses, ending with the ones declared and not yet running' },
+    { file: 'docs/PRIMITIVES.md', what: 'The full rubric with scoring anchors for all twelve layers' },
+    { file: 'docs/CONCEPT.md', what: 'The thesis and the architecture decisions, including why not blockchain' },
+    { file: 'docs/PLAN.md', what: 'The slice order for the first nine, and why each made the next one safer' },
+    { file: 'docs/PLAN-2.md', what: 'What is left after those nine, and the order it lands in' },
+    { file: 'docs/CONSOLE-API.md', what: 'The read-only API the console renders, and the rules it must not break' },
+    { file: 'docs/POLICY-SCHEMA.md', what: 'How to write policy: rules, capabilities, gates, rollback handles' },
+    { file: 'docs/EVENT-SCHEMA.md', what: 'Every event type on the ledger and its fields' },
+    { file: 'docs/proof/', what: 'One adversarial proof per slice, each produced by running the thing' },
+    { file: 'docs/DEPENDENCIES.md', what: 'Every dependency and why it is here. CI fails on an undocumented one' },
+    { file: 'CLAUDE.md', what: 'The invariants an agent working on this repo must hold, each naming what enforces it' }
+  ];
+
+  componentDidMount() {
+    this.mounted = true;
+    this.initReveal();
+    this.initParticles();
+    this.initDemoObserver();
+  }
+
+  componentDidUpdate() {
+    const el = this.termRef.current;
+    if (el && this.state.playing) el.scrollTop = el.scrollHeight;
+  }
+
+  componentWillUnmount() {
+    this.mounted = false;
+    if (this.timer) clearInterval(this.timer);
+    if (this.raf) cancelAnimationFrame(this.raf);
+    if (this.io) this.io.disconnect();
+    if (this.io2) this.io2.disconnect();
+    if (this.onResize) window.removeEventListener('resize', this.onResize);
+  }
+
+  initReveal() {
+    const nodes = document.querySelectorAll('[data-rise]');
+    this.io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.style.animationPlayState = 'running';
+          this.io.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    nodes.forEach((n) => this.io.observe(n));
+  }
+
+  initDemoObserver() {
+    const el = this.termRef.current;
+    if (!el) return;
+    this.io2 = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting && !this.everStarted && this.props.autoplayDemo !== false) {
+          this.everStarted = true;
+          this.play();
+        }
+      });
+    }, { threshold: 0.25 });
+    this.io2.observe(el);
+  }
+
+  play() {
+    if (this.timer) clearInterval(this.timer);
+    this.setState({ playing: true });
+    this.timer = setInterval(() => this.tick(), 26);
+  }
+
+  pause() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.setState({ playing: false });
+  }
+
+  toggle = () => { if (this.state.playing) this.pause(); else this.play(); };
+
+  restart = () => {
+    this.setState({ step: 0, typed: 0, out: 0, hold: 0 });
+    this.play();
+  };
+
+  pickStep = (i) => {
+    this.pause();
+    const s = this.STEPS[i];
+    this.setState({ step: i, typed: s.cmd.length, out: s.out.length, hold: 0 });
+  };
+
+  tick() {
+    const speed = Math.max(1, Math.round(this.props.demoSpeed ?? 3));
+    const s = this.STEPS[this.state.step];
+    const st = this.state;
+    if (st.typed < s.cmd.length) {
+      this.setState({ typed: Math.min(s.cmd.length, st.typed + speed) });
+    } else if (st.hold < 6) {
+      this.setState({ hold: st.hold + 1 });
+    } else if (st.out < s.out.length) {
+      this.setState({ out: st.out + 1, hold: 4 });
+    } else if (st.hold < 60) {
+      this.setState({ hold: st.hold + 1 });
+    } else if (st.step < this.STEPS.length - 1) {
+      this.setState({ step: st.step + 1, typed: 0, out: 0, hold: 0 });
+    } else {
+      this.pause();
+    }
+  }
+
+  initParticles() {
+    const canvas = this.canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let w = 0, h = 0, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const pts = [];
+    const mouse = { x: 0, y: 0, tx: 0, ty: 0 };
+
+    const seed = () => {
+      pts.length = 0;
+      const n = Math.min(170, Math.max(60, Math.round((w * h) / 16000)));
+      for (let i = 0; i < n; i++) {
+        pts.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.16,
+          vy: (Math.random() - 0.5) * 0.16,
+          r: Math.random() * 1.5 + 0.5
+        });
+      }
+    };
+
+    this.onResize = () => {
+      const rect = canvas.getBoundingClientRect();
+      w = rect.width; h = rect.height;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    };
+    this.onResize();
+    window.addEventListener('resize', this.onResize);
+
+    canvas.parentElement.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.tx = ((e.clientX - rect.left) / rect.width - 0.5) * 18;
+      mouse.ty = ((e.clientY - rect.top) / rect.height - 0.5) * 18;
+    });
+
+    const draw = () => {
+      if (!this.mounted) return;
+      mouse.x += (mouse.tx - mouse.x) * 0.04;
+      mouse.y += (mouse.ty - mouse.y) * 0.04;
+      ctx.clearRect(0, 0, w, h);
+      const thresh = Math.min(150, Math.max(90, w / 11));
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        if (!reduce) { p.x += p.vx; p.y += p.vy; }
+        if (p.x < -20) p.x = w + 20; if (p.x > w + 20) p.x = -20;
+        if (p.y < -20) p.y = h + 20; if (p.y > h + 20) p.y = -20;
+        for (let j = i + 1; j < pts.length; j++) {
+          const q = pts[j];
+          const dx = p.x - q.x, dy = p.y - q.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < thresh) {
+            ctx.strokeStyle = 'rgba(43,127,232,' + (0.16 * (1 - d / thresh)).toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(p.x + mouse.x, p.y + mouse.y);
+            ctx.lineTo(q.x + mouse.x, q.y + mouse.y);
+            ctx.stroke();
+          }
+        }
+      }
+      for (const p of pts) {
+        ctx.fillStyle = 'rgba(140,175,225,0.5)';
+        ctx.beginPath();
+        ctx.arc(p.x + mouse.x, p.y + mouse.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      this.raf = requestAnimationFrame(draw);
+    };
+    draw();
+  }
+
+  renderVals() {
+    const st = this.state;
+    const cur = this.STEPS[st.step];
+    const lines = [];
+    for (let i = 0; i < st.step; i++) {
+      const s = this.STEPS[i];
+      lines.push({ isCmd: true, isOut: false, cursor: false, t: s.cmd, c: '#f0f2f8' });
+      s.out.forEach((o) => lines.push({ isCmd: false, isOut: true, cursor: false, t: o.t, c: o.c }));
+      lines.push({ isCmd: false, isOut: true, cursor: false, t: '', c: '#6b7291' });
+    }
+    const typing = st.typed < cur.cmd.length;
+    lines.push({ isCmd: true, isOut: false, cursor: typing || (st.out === 0 && st.hold < 6), t: cur.cmd.slice(0, st.typed), c: '#f0f2f8' });
+    cur.out.slice(0, st.out).forEach((o) => lines.push({ isCmd: false, isOut: true, cursor: false, t: o.t, c: o.c }));
+
+    const sim = this.SIMS[st.sim];
+    const vTone = sim.verdict === 'allow'
+      ? { vColor: '#2b7fe8', vBorder: 'rgba(43,127,232,.4)', vBg: 'rgba(43,127,232,.08)' }
+      : sim.verdict === 'hold'
+        ? { vColor: '#e0a13a', vBorder: 'rgba(224,161,58,.4)', vBg: 'rgba(224,161,58,.08)' }
+        : { vColor: '#ff5f5a', vBorder: 'rgba(255,95,90,.4)', vBg: 'rgba(255,95,90,.08)' };
+
+    const prim = this.PRIMS[st.prim];
+
+    return {
+      canvasRef: this.canvasRef,
+      termRef: this.termRef,
+      lines,
+      note: cur.note,
+      playLabel: st.playing ? 'Pause' : 'Play',
+      progressLabel: 'step ' + (st.step + 1) + ' / ' + this.STEPS.length,
+      toggle: this.toggle,
+      restart: this.restart,
+      steps: this.STEPS.map((s, i) => ({
+        n: String(i + 1).padStart(2, '0'),
+        label: s.label,
+        bg: i === st.step ? '#131520' : 'transparent',
+        color: i === st.step ? '#f0f2f8' : '#7d86a3',
+        numColor: i === st.step ? '#2b7fe8' : '#4d5570',
+        pick: () => this.pickStep(i)
+      })),
+      questions: this.QUESTIONS,
+      concepts: this.CONCEPTS,
+      sims: this.SIMS.map((s, i) => ({
+        cmd: s.cmd,
+        color: i === st.sim ? '#f0f2f8' : '#7d86a3',
+        bg: i === st.sim ? 'rgba(43,127,232,.1)' : 'rgba(19,21,32,.6)',
+        bc: i === st.sim ? 'rgba(43,127,232,.45)' : '#1e2235',
+        pick: () => this.setState({ sim: i })
+      })),
+      sim: Object.assign({}, sim, vTone),
+      spine: this.SPINE.map((e) => ({
+        kind: e.kind,
+        what: e.what,
+        dot: e.warn ? '#e0a13a' : e.accent ? '#2b7fe8' : '#294067',
+        kindColor: e.warn ? '#e0a13a' : e.accent ? '#2b7fe8' : '#9aa3bd'
+      })),
+      prims: this.PRIMS.map((p, i) => ({
+        n: p.n,
+        layer: p.layer,
+        score: String(p.score),
+        bg: i === st.prim ? '#131520' : '#0d0e12',
+        bar: i === st.prim ? '#2b7fe8' : p.score >= 4 ? '#294067' : '#1e2235',
+        color: i === st.prim ? '#f0f2f8' : '#9aa3bd',
+        scoreColor: p.score >= 4 ? '#2b7fe8' : '#6b7291',
+        pick: () => this.setState({ prim: i })
+      })),
+      prim: Object.assign({}, prim, {
+        score: String(prim.score),
+        pips: [0, 1, 2, 3, 4].map((k) => ({ c: k < prim.score ? '#2b7fe8' : '#1e2235' }))
+      }),
+      tabs: this.TABS.map((t, i) => ({
+        label: t.label,
+        bg: i === st.tab ? '#131520' : '#0d0e12',
+        color: i === st.tab ? '#f0f2f8' : '#6b7291',
+        pick: () => this.setState({ tab: i })
+      })),
+      tab: this.TABS[st.tab],
+      tab0: st.tab === 0,
+      tab1: st.tab === 1,
+      tab2: st.tab === 2,
+      views: this.VIEWS,
+      modules: this.MODULES,
+      profiles: this.PROFILES.map((p) => ({
+        name: p.name,
+        isolation: p.isolation,
+        identity: p.identity,
+        ledger: p.ledger,
+        rung: p.rung,
+        color: p.live ? '#9aa3bd' : '#4d5570',
+        nameColor: p.live ? '#2b7fe8' : '#6b7291',
+        bg: p.live ? 'rgba(43,127,232,.05)' : 'transparent'
+      })),
+      docs: this.DOCS.map((d) => ({
+        file: d.file,
+        what: d.what,
+        href: 'https://github.com/Mariano215/gantry/blob/main/' + d.file
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

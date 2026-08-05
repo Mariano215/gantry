@@ -312,6 +312,12 @@ if ! zsh ci/console-render.sh; then
   exit 1
 fi
 
+echo "== the published page fetches nothing from any host (ci/site-offline) =="
+if ! zsh ci/site-offline.sh; then
+  echo "the page published to GitHub Pages reaches a host, or did not render without one. Fix: read the line above; site/ is built by python3 dev/build-site.py and is committed built, so a hand edit under site/ is lost on the next build"
+  exit 1
+fi
+
 echo "== every dependency has a note in docs/DEPENDENCIES.md =="
 deps=$(sed -n '/^\[dependencies\]/,/^\[/p' Cargo.toml | grep -E '^[a-z0-9_-]+ *=' | cut -d= -f1 | tr -d ' ')
 for dep in ${(f)deps}; do

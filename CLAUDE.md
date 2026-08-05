@@ -432,6 +432,22 @@ indistinguishable from a use and the count would be wrong by one.
   the same question is a race with the browser's virtual clock and a flaky gate
   is one people learn to skip.
   `[UNENFORCED]` `ci/console-open-row-survives-poll`
+- **The page that makes the claim does not break it.** The site published to
+  GitHub Pages prints "no hosted control plane, no licence check, no CDN font"
+  and, as exported by the design tool, fetched React from unpkg and three
+  families from Google Fonts while printing it. `dev/build-site.py` vendors
+  React out of the build machine's own node_modules and drops the font import
+  and the design-system bundle, which is also where every link to an unrelated
+  project came from. The check has to render, not read: a page whose runtime
+  never loaded still answers 200 with a body, so `ci/site-offline.sh` serves
+  `site/` with every name but 127.0.0.1 mapped to NOTFOUND and asserts that
+  text carried only by the logic script reaches the DOM. The first marker
+  chosen was rejected by the check itself for also sitting in the static
+  template, and the first render assertion passed with React deleted, because
+  `--dump-dom` returns script elements with their text; the dump is stripped of
+  them before the grep. — enforced by `ci/site-offline.sh`, run by `ci/run.sh`
+  on every push, proved able to fail by adding an absolute script src, putting
+  the font import back, and deleting each vendored React build in turn
 - **Authority is built from what the caller observed, never from what the
   process is running under.** `Pinning` carries the observed permission mode
   and `GatewayRun::open` records that, rather than reading

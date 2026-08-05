@@ -1,0 +1,43 @@
+name: pages
+
+# Publishes site/ to GitHub Pages. There is no build step here on purpose:
+# site/ is committed already built, by dev/build-site.py, so what deploys is
+# the directory ci/site-offline.sh renders and asserts on. A workflow that
+# rebuilt the page here would be publishing something no check had rendered.
+#
+# One setting is needed once, in the repository's Settings, Pages: source set
+# to GitHub Actions. Without it this job fails on the deploy step.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and a queued run is not cancelled: cancelling the run
+# that is mid-deploy is how a half-published site happens.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+      - id: deployment
+        uses: actions/deploy-pages@v4

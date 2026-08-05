@@ -11,6 +11,22 @@ is doing that from its own telemetry rather than its own documentation.**
 One static binary. No cloud account, no phone-home, runs air-gapped. Works
 with any model provider and under any agent framework.
 
+<p align="center">
+  <img src="docs/assets/first-hour.svg" alt="A terminal session: gantry initialises a ledger, refuses a destructive tool call while naming the rule and the fix, verifies the record, then detects one altered character on a copy of it with three independent faults" width="749">
+</p>
+
+Four commands, and every line above came out of the binary. `dev/termcast.py`
+runs the tape in `dev/readme-cast.tape` and draws what it printed, so the
+animation cannot show output gantry did not produce. It is a plain SVG with no
+script and no host to fetch anything from, because a README that phones out on
+the first screen would contradict the paragraph above it.
+
+The same material with the terminal, the policy simulator and the scorecard
+you can click through is at **[mariano215.github.io/gantry](https://mariano215.github.io/gantry/)**.
+It is served as static files that reference no host either, which
+`ci/site-offline.sh` holds by rendering the page with every name but loopback
+unresolvable.
+
 ## The problem, in plain English
 
 An agent is two things: a model, and the harness around it. The model writes

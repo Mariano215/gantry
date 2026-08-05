@@ -20,6 +20,23 @@ chokepoint allowed to reach a model provider (architecture invariant one).
 Blocking client, rustls, no tokio tree. Tests never use it against a real
 host; the suite talks to loopback stubs only.
 
+## site/vendor (not a crate either, noted for the same reason)
+
+The page published to GitHub Pages ships React and ReactDOM 18.3.1, MIT, as
+the UMD production builds with their licence headers intact, under
+`site/vendor`. They are there so the page fetches nothing at view time: as the
+design tool exported it, the page pulled both from unpkg and three font
+families from Google Fonts, on a page whose own text says this project fetches
+nothing from any host.
+
+Network capability at view time: none, which is the point, and
+`ci/site-offline.sh` is what says so rather than this paragraph. The build
+(`dev/build-site.py`) copies them from a node_modules directory already on the
+build machine and fetches nothing itself; it refuses rather than downloading if
+the version `site/support.js` names is not there. Nothing in the Rust binary
+links against any of this: it is a static page, served by GitHub, and the
+console the binary serves is unrelated and still has no dependency at all.
+
 ## std::process (not a crate, noted anyway)
 
 Since slice 03 the broker executes shell commands strictly after an allow
