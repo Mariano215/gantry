@@ -139,6 +139,16 @@ trust_budget:
     approval_required: false
 ```
 
+Two notes on `profile_requirements`, both since slice 15, when `gantry drift`
+started reading these fields instead of describing them. The shape above shows
+`egress.observed_by: netns.route_table`; `config/policy.json` names
+`sandbox.egress_allow`. Nothing reads either one, and the Drift section below
+says why the second is worse than the first. And only one value per field is
+compared, the one named `declared`, except for `attestation`, whose `declared`
+is the algorithm and whose observable value is the `key_id` beside it. The rows
+next to those (`egress.allow`, `ledger.anchoring`, `ledger.key_custody`,
+`identity.fallback_permitted`) are read by nothing.
+
 ## Effect classes
 
 The class is a property of what the call does to the world, not of how risky it
@@ -281,19 +291,60 @@ naming the divergence. That is the whole reason `observed_by` is mandatory.
 
 ## Drift
 
-`gantry drift` walks `profile_requirements`, reads each `observed_by` source,
-and emits one `drift.report` per field on a schedule, not only on change, so
-silence is evidence rather than absence.
+`gantry drift <ledger-dir> <policy.json>` walks `profile_requirements`, reads
+each `observed_by` source from the running system, and appends one
+`drift.report` per field. Every field reports every run, matches included, so
+silence is evidence rather than absence. Running it on a schedule is the
+caller's job: `ci/run.sh` runs it on every push, and the weekly cron in
+`.github/workflows/ci.yml` runs the same gate. Implemented in `src/drift.rs`
+since slice 15; before that this section described a subcommand that did not
+exist.
 
 Three outcomes per field:
 
 - **match**: declared equals observed.
 - **divergence**: declared differs from observed. The report names both values
-  and the fix. Any run containing a divergent field emits its events with
-  `authority.declared: false`, which caps primitive 12 at 2.
-- **unobservable**: `observed_by: none`. Reported as a gap in the scan, not as
-  a match. This is the field that would otherwise let a policy claim a control
-  nothing checks.
+  and the fix, and the command exits 1. The run's own events carry the field in
+  `authority.diverged`, as `<field>.<compared>`, which is the mechanism
+  `docs/EVENT-SCHEMA.md` defines for a declaration that does not match what is
+  running. There is no `authority.declared` boolean to set false: the v1 field
+  of that name became the `diverged` list in slice 01, and this section went on
+  describing the field it replaced.
+- **unobservable**: no value was read. `observed_by: none` is one way to get
+  here. A source no code reads is another, and so is a readable source with
+  nothing to read yet, since an empty ledger has no head and no event to take
+  an identity source or a key id off. Reported as a gap, never as a match, and
+  it does not fail the command: the tracked policy has gaps by admission, and
+  an exit code that hid them would be the same mistake in a different place.
+
+### Which sources are observations and which are admissions
+
+| `observed_by` | Read from | What it is |
+|---|---|---|
+| `sandbox.active_backend` | whether the seatbelt binary exists, the same expression `Sandbox::per_run` stamps on every `tool.request` | observation |
+| `gateway.instruction_hash` | sha256 of the instruction pack the run pins | observation |
+| `hook.settings_hash` | sha256 of the host settings file | observation |
+| `ledger.head` | whether the ledger has a signed head | observation of the storage shape, and of nothing else in the row |
+| `gateway.identity_source` | `actor.identity_source` on the newest event already on the ledger | telemetry, and the producer of that event is this same binary |
+| `event.attestation.key_id` | `attestation.key_id` on the newest event; an event with no attestation reads `unsigned`, which diverges from a declared key | observation |
+| `sandbox.egress_allow` | nothing | admission: the seatbelt allowlist is generated from this policy's own `egress.allow`, so reading it back would compare the declaration with itself and agree every time |
+| `netns.route_table` | nothing | admission: this build reads no network namespace, and the host it runs on has none |
+| any other value, or `none` | nothing | admission |
+
+The two named admissions are the point of the table. An egress check that read
+the generated allowlist back would report `match` on every run while the host
+route table permitted the world, which is a control living in this document
+wearing the badge of one that runs. `ci/run.sh` fails if any field whose
+`observed_by` is outside the readable list is reported as anything but
+`unobservable`, and it fails on a policy that declares a host permission hash
+the running system does not have, so both directions are checked on every push.
+
+What still does not run: the rows beside the compared value are read by
+nothing, so `egress.allow`, `ledger.anchoring`, `ledger.key_custody` and
+`identity.fallback_permitted` are declarations the scan does not touch.
+`rung_default` and `on_unavailable` name no source at all and report as gaps,
+which is the honest reading of a scalar this document alone carries. Nothing
+schedules the walk from inside the binary; CI is the schedule.
 
 ## Relationship to the host harness permission list
 

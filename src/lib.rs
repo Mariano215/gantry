@@ -1,5 +1,6 @@
 pub mod broker;
 pub mod console;
+pub mod drift;
 pub mod durable;
 pub mod event;
 pub mod gateway;

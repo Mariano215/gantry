@@ -34,6 +34,7 @@ const USAGE: &str = "usage:
   gantry ledger scan-secrets <dir>                  (values from GANTRY_HANDLE_*)
   gantry run <providers.json> <provider-name> <ledger-dir>
   gantry policy check <policy.json> [settings.json]
+  gantry drift <ledger-dir> <policy.json>
   gantry broker register <ledger-dir> <tool-def.json>
   gantry broker call <ledger-dir> <tool> <target>
   gantry audit <ledger-dir> <providers.json> <provider> <file>
@@ -247,6 +248,7 @@ fn run() -> Result<i32, Fault> {
         ["policy", "check", policy_path, settings_path] => {
             policy_check(policy_path, Some(settings_path))
         }
+        ["drift", ledger_dir, policy_path] => drift_scan(ledger_dir, policy_path),
         ["broker", "register", ledger_dir, def_path] => {
             let mut run = open_broker(ledger_dir, "tool-registration")?;
             let def_text = read_file(def_path)?;
@@ -392,6 +394,69 @@ fn policy_check(policy_path: &str, settings_path: Option<&str>) -> Result<i32, F
         }
     }
     Ok(exit)
+}
+
+/// Walks `profile_requirements` against the running system and appends one
+/// `drift.report` per field. Every field reports every run, matches included,
+/// because a scan that speaks only on change reads the same as a scan that
+/// stopped running. The exit status is 1 when any field diverged; a field
+/// nothing can observe is reported as a gap and does not fail the command,
+/// because the tracked policy has gaps by admission and hiding them behind an
+/// exit code would be the same mistake in a different place.
+fn drift_scan(ledger_dir: &str, policy_path: &str) -> Result<i32, Fault> {
+    let policy = Policy::load(Path::new(policy_path))?;
+    let dir = Path::new(ledger_dir);
+    let ledger = if dir.join("events.jsonl").exists() {
+        Ledger::open(dir)?
+    } else {
+        Ledger::init(dir)?
+    };
+    let instructions = Path::new("instructions/pack.md");
+    let settings_path = Path::new(".claude/settings.json");
+    let settings = Some(settings_path).filter(|p| p.exists());
+    // Observed before the run appends anything: a walk that read the ledger
+    // after writing its own reports would be observing itself.
+    let running = gantry::drift::Running::observe(&ledger, instructions, settings);
+    let reports = gantry::drift::walk(&policy, &running);
+    let mut diverged = settings_divergence(settings_path);
+    diverged.extend(gantry::drift::diverged_ids(&reports));
+    let pin = Pinning {
+        policy: policy_path.into(),
+        instructions: instructions.into(),
+        settings: settings.map(Into::into),
+        diverged,
+    };
+    let authority = pin.authority(
+        &policy.profile,
+        &policy.policy_version.clone().unwrap_or_default(),
+    )?;
+    let actor = json!({
+        "type": "system",
+        "id": "system:drift",
+        "identity_source": "local",
+        "rung": null,
+    });
+    let signer = gantry::runlog::ActorSigner::declared(
+        &policy.profile,
+        &policy.profile_requirements,
+        gateway::policy_dir(Path::new(policy_path)),
+    )?;
+    let mut run = gantry::runlog::RunCore::open(ledger, actor, authority).signed_by(signer);
+    for report in &reports {
+        run.append("drift.report", report.subject())?;
+        println!("{}", report.line());
+    }
+    let (matched, divergences, gaps) = gantry::drift::tally(&reports);
+    let head = run.seal(
+        json!({"drift": {"match": matched, "divergence": divergences, "unobservable": gaps}}),
+        "complete",
+    )?;
+    println!(
+        "{} field(s) walked: {matched} match, {divergences} divergence, {gaps} unobservable (ledger sealed at size {})",
+        reports.len(),
+        head.size
+    );
+    Ok(i32::from(divergences > 0))
 }
 
 /// One turn of a real agent loop: the broker reads an untrusted file, the
