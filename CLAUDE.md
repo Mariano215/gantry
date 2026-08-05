@@ -140,7 +140,13 @@ work item, and `gantry scan` on this repo is expected to report it.
   `no-private-key` sensor's are a real ledger envelope and the tracked policy
   and review records, so a check that fires on this system's own sha256
   output is reported broken rather than shipped and switched off. Enforced by
-  `ci/run.sh` and `.github/workflows/ci.yml`
+  `ci/run.sh` and `.github/workflows/ci.yml`. What a sensor's `placement`
+  declares is still not honoured: the value is recorded on every verdict and
+  nothing dispatches on it, so `pre_integration` and `post_integration` are
+  descriptions rather than schedule. `[UNENFORCED]`
+  `ci/sensor-placement-honoured`. This marker was carried by
+  `docs/proof/05.md` and had gone missing from this file, which is the defect
+  this file's own opening paragraph describes
 - **An attestation is verified or declared unverified, never assumed.** The
   ledger verifier checks actor attestations against registered keys: an
   attestation under a registered key id is verified (a failure is a fault,

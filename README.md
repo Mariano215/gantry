@@ -351,7 +351,7 @@ same twelve numbers without trusting the binary.
 | 11 | Observability | 3 | Requests, decisions and results all flow through the chokepoint onto the signed ledger. |
 | 12 | Governance | 3 | Authority-as-code produced a named denial; the running permission mode is recorded per event and divergence from the tracked declaration is reported. |
 
-**Overall level: 3.** Five layers stand at 4, and seven sit at 3, which is why
+**Overall level: 3.** Four layers stand at 4, and eight sit at 3, which is why
 the overall number has not moved: it is the minimum, and the minimum is the
 honest figure. Primitive 01 reached 4 when the instruction-lifecycle sensor
 started gating the pack and `docs/proof/08-run.sh` started running it. Adding
