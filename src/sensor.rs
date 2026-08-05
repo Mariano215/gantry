@@ -33,11 +33,41 @@ pub enum Placement {
     Continuous,
 }
 
+/// One control or a list of them. A check that catches several kinds of
+/// thing needs one control per kind, or the branches nobody controls are
+/// dead while the sensor still reports live. The single-string spelling
+/// stays valid so a sensor with one branch reads as it always did.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Controls {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl Controls {
+    pub fn all(&self) -> &[String] {
+        match self {
+            Controls::One(s) => std::slice::from_ref(s),
+            Controls::Many(v) => v,
+        }
+    }
+}
+
+impl Default for Controls {
+    fn default() -> Self {
+        Controls::Many(Vec::new())
+    }
+}
+
 /// A registered sensor. `check` is a shell command with `{target}`
 /// substituted by the artifact path; exit zero passes. `fix` is the message
 /// a failing verdict carries, and it must name an action. `negative_control`
-/// is the content the check must reject, which is what makes the sensor's
-/// own liveness checkable.
+/// is the content the check must reject, one entry per branch of the check,
+/// which is what makes the sensor's own liveness checkable.
+/// `positive_control` is the content it must accept, which is what makes its
+/// calibration checkable: a sensor that fires on the telemetry its own
+/// system emits gets switched off, and a switched-off sensor is worth less
+/// than a narrow one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Sensor {
     pub id: String,
@@ -47,7 +77,9 @@ pub struct Sensor {
     pub blocking: bool,
     pub check: String,
     pub fix: String,
-    pub negative_control: String,
+    pub negative_control: Controls,
+    #[serde(default)]
+    pub positive_control: Controls,
 }
 
 fn default_true() -> bool {
@@ -109,6 +141,12 @@ impl Sensor {
                 "put {target} in the check command so the sensor actually inspects the artifact",
             ));
         }
+        if self.negative_control.all().is_empty() {
+            return Err(Fault::new(
+                format!("sensor {} declares no negative control", self.id),
+                "add negative_control: one input the check must reject, per branch of the check; a sensor with none can never be shown to fail",
+            ));
+        }
         Ok(())
     }
 
@@ -136,12 +174,45 @@ impl Sensor {
         Ok(out.status.success())
     }
 
-    /// The liveness check. A sensor must reject its own negative control; a
-    /// sensor that passes it cannot fail and is therefore broken. This runs
-    /// before any real verdict is trusted.
+    /// The liveness check, in full: every negative control must be rejected
+    /// and every positive control accepted. Returns the message for the first
+    /// control that goes the wrong way, naming which one it was by index so
+    /// the reader can open the sensor file at that entry. It never echoes a
+    /// control's content, because a negative control is key material by
+    /// construction.
+    fn liveness_failure(&self, sandbox: &Sandbox) -> Result<Option<String>, Fault> {
+        let negatives = self.negative_control.all();
+        for (i, control) in negatives.iter().enumerate() {
+            if self.run_check(sandbox, control)? {
+                return Ok(Some(format!(
+                    "Sensor {} passed negative control {} of {}, so that branch of its check cannot fail and its verdicts are worthless. Widen the check until control {} fails, then re-register.",
+                    self.id,
+                    i + 1,
+                    negatives.len(),
+                    i + 1,
+                )));
+            }
+        }
+        let positives = self.positive_control.all();
+        for (i, control) in positives.iter().enumerate() {
+            if !self.run_check(sandbox, control)? {
+                return Ok(Some(format!(
+                    "Sensor {} rejected positive control {} of {}, so it fires on content it is required to accept and will be switched off, which is worse than a narrow check. Narrow the check until control {} passes, then re-register.",
+                    self.id,
+                    i + 1,
+                    positives.len(),
+                    i + 1,
+                )));
+            }
+        }
+        Ok(None)
+    }
+
+    /// A sensor must reject every negative control it declares and accept
+    /// every positive one; a sensor that fails either direction cannot be
+    /// trusted and is reported broken. This runs before any real verdict.
     pub fn is_live(&self, sandbox: &Sandbox) -> Result<bool, Fault> {
-        // Live means: the negative control does NOT pass the check.
-        Ok(!self.run_check(sandbox, &self.negative_control)?)
+        Ok(self.liveness_failure(sandbox)?.is_none())
     }
 
     /// Evaluate the sensor against a target file's contents. Runs the
@@ -153,17 +224,14 @@ impl Sensor {
         target: &str,
         content: &str,
     ) -> Result<SensorVerdict, Fault> {
-        if !self.is_live(sandbox)? {
+        if let Some(why) = self.liveness_failure(sandbox)? {
             return Ok(SensorVerdict {
                 sensor: self.id.clone(),
                 kind: self.kind,
                 placement: self.placement,
                 verdict: Verdict::Broken,
                 blocked: self.blocking,
-                message: Some(format!(
-                    "Sensor {} passed its own negative control, so it cannot fail and its verdicts are worthless. Fix the check so the negative control fails, then re-register.",
-                    self.id
-                )),
+                message: Some(why),
                 target: target.to_string(),
             });
         }
@@ -297,7 +365,8 @@ mod tests {
             blocking: true,
             check: "! grep -q 'BEGIN PRIVATE KEY' {target}".into(),
             fix: "Remove the embedded private key from the findings and reference it by a broker handle instead.".into(),
-            negative_control: "-----BEGIN PRIVATE KEY-----\nMII...\n".into(),
+            negative_control: Controls::One("-----BEGIN PRIVATE KEY-----\nMII...\n".into()),
+            positive_control: Controls::default(),
         }
     }
 
@@ -331,7 +400,8 @@ mod tests {
             // Ignores the target entirely and always passes.
             check: "true # {target}".into(),
             fix: "This should never be reachable.".into(),
-            negative_control: "-----BEGIN PRIVATE KEY-----".into(),
+            negative_control: Controls::One("-----BEGIN PRIVATE KEY-----".into()),
+            positive_control: Controls::default(),
         };
         let sb = sandbox("broken");
         let v = broken.evaluate(&sb, "anything", "anything").unwrap();
@@ -353,6 +423,16 @@ mod tests {
     fn fix_must_name_an_action_at_load() {
         let mut s = no_key_sensor();
         s.fix = "  ".into();
+        assert!(s.validate().is_err());
+    }
+
+    /// The list spelling makes an empty control list expressible, and a
+    /// sensor with no negative control is one whose liveness check is
+    /// vacuous, which is the thing the bus exists to refuse.
+    #[test]
+    fn a_sensor_with_no_negative_control_refuses_to_load() {
+        let mut s = no_key_sensor();
+        s.negative_control = Controls::Many(vec![]);
         assert!(s.validate().is_err());
     }
 

@@ -21,7 +21,7 @@ cargo run --quiet -- policy check config/policy.json .claude/settings.json
 echo "== tracked template validates whole (a broken bundle refuses) =="
 cargo run --quiet -- template validate templates/laptop
 
-echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects its negative control =="
+echo "== sensor liveness sweep (ci/sensor-liveness-schedule): every tracked sensor rejects every negative control it declares and accepts every positive one =="
 cargo run --quiet -- sensor live templates/laptop/config/sensors/*.json docs/proof/fixtures/no-private-key.json
 
 echo "== permission-mode hook injects the observed mode into gantry commands, leaves everything else alone (ci/permission-mode-hook) =="
