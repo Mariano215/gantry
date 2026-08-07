@@ -905,7 +905,19 @@ fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
                 };
             }
             Some("policy.decision") => {
-                let Some((request_id, call_hash)) = pending.take() else {
+                // The decision names its own call since slice 21. Older
+                // ledgers carry neither field, so the adjacency walk stays as
+                // a fallback rather than dropping their holds off the inbox;
+                // it is right only while calls do not interleave, which is
+                // why the recorded pair wins where there is one.
+                let recorded = match (
+                    subject["request_id"].as_str(),
+                    subject["call_hash"].as_str(),
+                ) {
+                    (Some(id), Some(hash)) => Some((id.to_string(), hash.to_string())),
+                    _ => None,
+                };
+                let Some((request_id, call_hash)) = recorded.or_else(|| pending.take()) else {
                     continue;
                 };
                 if subject["verdict"].as_str() != Some("hold") {
