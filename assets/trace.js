@@ -12,6 +12,11 @@ import {
   el, svgEl, clear, mono, panel, loading, actorId, attMark, attRowClass,
   subjectSummary, num, tsShort,
 } from '/ui.js';
+// views.js imports this module, so this is a cycle. It is safe because the
+// binding is read when a pane is built and never while either module is
+// evaluating, and it beats a second copy of the detail tree that would drift
+// from the one the ledger view shows.
+import { eventDetail } from '/views.js';
 
 export const EVENT_PAGE_MAX = 1000;
 
@@ -147,14 +152,46 @@ export function derive(events) {
     }
   }
 
-  return { lanes: [...lanes.values()], marks, edges, spans: [], t0, span };
+  // A hold and the approval that answered it, linked by the call hash both
+  // record. Before the decision carried its own call hash this pair was only
+  // reachable by position, which is why it is drawn now and was not before.
+  // A refusal ends the wait too, so it makes a span; the verdict rides along
+  // because a span that read the same for yes and no would erase the
+  // distinction the approval path exists to draw.
+  const spans = [];
+  const heldAt = new Map();
+  for (const m of marks) {
+    const s = m.ev._subject || {};
+    if (m.ev.kind === 'policy.decision' && s.verdict === 'hold' && s.call_hash) {
+      if (!heldAt.has(s.call_hash)) heldAt.set(s.call_hash, m);
+    }
+    if (m.ev.kind === 'approval' && s.call_hash && heldAt.has(s.call_hash)) {
+      const held = heldAt.get(s.call_hash);
+      spans.push({
+        from: held,
+        to: m,
+        ms: Math.max(m.at - held.at, 0),
+        callHash: s.call_hash,
+        rule: s.rule,
+        verdict: s.verdict === 'deny' ? 'refused' : 'approved',
+        approver: s.approver,
+      });
+      heldAt.delete(s.call_hash);
+    }
+  }
+
+  return { lanes: [...lanes.values()], marks, edges, spans, t0, span };
 }
 
 export async function trace(host, route) {
   const body = el('div', { class: 'view' }, loading('trace'));
   clear(host).append(body);
 
-  const run = route.segments[1] ? decodeURIComponent(route.segments[1]) : null;
+  // #/trace/<run id> and #/trace/event/<event id> share segment 1. The literal
+  // "event" is the discriminator, and anything else is a run id.
+  const isEvent = route.segments[1] === 'event';
+  const run = !isEvent && route.segments[1] ? decodeURIComponent(route.segments[1]) : null;
+  const focusId = isEvent && route.segments[2] ? decodeURIComponent(route.segments[2]) : null;
   const expr = route.query.f
     ? decodeURIComponent(route.query.f)
     : (run ? `run:${run}` : '');
@@ -169,13 +206,52 @@ export async function trace(host, route) {
 
   clear(body).append(
     filterBar(expr, events.length, page.length, res.total, filter),
-    panel('Trace', {
-      sub: `${num(model.lanes.length)} lanes, ${num(events.length)} of ${num(res.total)} events drawn`,
-      flush: true,
-    },
-    legend(model),
-    el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
+    el('div', { class: focusId ? 'trace-split' : null },
+      panel('Trace', {
+        sub: `${num(model.lanes.length)} lanes, ${num(events.length)} of ${num(res.total)} events drawn`,
+        flush: true,
+      },
+      legend(model),
+      spanList(model),
+      el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
+      detailPane(model, focusId)),
   );
+}
+
+// A hold and the answer to it, with the real wait between them.
+function spanList(model) {
+  if (!model.spans.length) return null;
+  return el('div', { class: 'trace-spans' }, model.spans.map((s) =>
+    el('div', { class: 'trace-span' },
+      el('b', {}, `held ${(s.ms / 1000).toFixed(1)}s`),
+      el('span', { class: s.verdict === 'refused' ? 'deny-text' : null }, s.verdict),
+      mono(s.rule || 'no rule on the approval'),
+      s.approver ? el('span', { class: 'faint mono' }, s.approver) : null,
+      el('a', { class: 'mono faint', href: `#/trace?f=${encodeURIComponent(`call:${s.callHash}`)}` },
+        'follow this call'))));
+}
+
+// The detail tree the ledger view already builds, docked beside the graph and
+// opened from its own route rather than from a click, which is what makes it
+// reachable without a browser driver.
+function detailPane(model, focusId) {
+  if (!focusId) return null;
+  const m = model.marks.find((x) => x.ev.id === focusId);
+  if (!m) {
+    return el('aside', { class: 'trace-aside' },
+      el('div', { class: 'trace-aside-head' }, mono(focusId)),
+      el('p', { class: 'faint' },
+        'this event is not on the page the trace drew, so there is nothing to open. It may sit outside the current filter, or beyond the events this read returned.'));
+  }
+  const box = el('div', { class: 'trace-detail' });
+  eventDetail(box, m.ev);
+  return el('aside', { class: 'trace-aside' },
+    el('div', { class: 'trace-aside-head' },
+      mono(m.ev.id),
+      el('span', { class: 'faint mono' },
+        `+${(m.offsetMs / 1000).toFixed(3)}s from first, +${(m.deltaMs / 1000).toFixed(3)}s from previous`),
+      el('a', { href: '#/trace' }, 'close')),
+    box);
 }
 
 function filterBar(expr, shown, page, total, filter) {
@@ -268,6 +344,11 @@ function markNode(m, model) {
     'data-kind': m.ev.kind,
     'data-event': m.ev.id,
     style: `left:${Math.min(99.5, Math.max(0, pct))}%`,
-    title: `${m.ev.kind} at ${tsShort(m.ev.ts)}`,
+    title: `${m.ev.kind} at ${tsShort(m.ev.ts)}, +${(m.offsetMs / 1000).toFixed(3)}s from first, +${(m.deltaMs / 1000).toFixed(3)}s from previous`,
+    // A route rather than a handler that mutates, so the pane is reachable by
+    // link and the render gate can open it without a browser driver.
+    onclick: () => {
+      location.hash = `#/trace/event/${encodeURIComponent(m.ev.id)}`;
+    },
   }, attMark(m.ev), mono(m.ev.kind), subjectSummary(m.ev));
 }

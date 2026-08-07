@@ -343,8 +343,11 @@ ROUTE[takeover]="overview"; ORIGIN_OF[takeover]=$BROKEN_ORIGIN
 # The trace under a filter whose term the events route cannot answer, so the
 # browser-side half runs and the bar has both numbers to report.
 ROUTE[tracefiltered]="trace?f=verdict%3Adeny"; ORIGIN_OF[tracefiltered]=$ORIGIN
+# The detail pane, opened by its own route. A click is unreachable under
+# --dump-dom, and a pane only a click can open is a pane nothing checks.
+ROUTE[tracedetail]="trace/event/$EVENT_ID"; ORIGIN_OF[tracedetail]=$ORIGIN
 
-ALL=($VIEWS rundetail eventrow holdrow takeover tracefiltered)
+ALL=($VIEWS rundetail eventrow holdrow takeover tracefiltered tracedetail)
 WAVE=4
 i=1
 while (( i <= $#ALL )); do
@@ -413,6 +416,16 @@ expect tracefiltered "match the server-side part of this filter" "the bar states
 expect tracefiltered "$RULE" "the filtered trace drew the denial the fixture recorded"
 refute tracefiltered "tool.request" "an event the filter excludes, so the browser-side half of the filter never ran"
 
+# The held spans, and the pane opened by its own route. Both approvals on this
+# fixture answer a call the policy held, one yes and one no, and the span has
+# to say which: a refusal rendered as a release would erase the distinction the
+# approval path exists to draw.
+expect trace "held " "a hold and the answer to it, linked by the call hash both events record"
+expect trace "refused" "the refusal reads as a refusal and not as a release"
+expect trace "approved" "the grant reads as a grant"
+expect tracedetail "$EVENT_ID" "the detail pane opened by its own route, without a click"
+expect tracedetail "from first," "the pane carries the two deltas, so a reader has the time between marks"
+
 # Policy: /api/policy, including the firing count joined off the ledger.
 expect policy "$RULE" "the rule table lists the rule that denied the call"
 expect policy "repo.write" "the capability table lists the declared capabilities"
@@ -479,4 +492,4 @@ expect takeover "It cannot be dismissed" "the banner that survives the dismissal
 refute takeover 'The twelve primitives'
 refute takeover 'Attestation coverage'
 
-echo "eight views, two deep-linked rows and the takeover rendered against a $SIZE-event ledger; head, score, events, events/:id, runs, policy, trust, approvals and verify all reached the screen"
+echo "eight views, four deep-linked routes and the takeover rendered against a $SIZE-event ledger; head, score, events, events/:id, runs, policy, trust, approvals and verify all reached the screen"

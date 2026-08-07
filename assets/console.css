@@ -885,3 +885,30 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
   border-radius: var(--radius);
 }
 .filter-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.trace-split { display: grid; grid-template-columns: 1fr minmax(30ch, 46ch); gap: var(--gutter); align-items: start; }
+@media (max-width: 1100px) { .trace-split { grid-template-columns: 1fr; } }
+
+.trace-aside {
+  position: sticky;
+  top: var(--gutter);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.trace-aside-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.trace-aside p { padding: 8px var(--gutter); }
+.trace-detail { padding: 0 var(--gutter) 8px; }
+
+.trace-spans { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); border-bottom: 1px solid var(--line); }
+.trace-span { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; font-size: var(--fs-sm); }

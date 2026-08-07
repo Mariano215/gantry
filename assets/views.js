@@ -59,7 +59,7 @@ function section(title, ...body) {
 
 const faultFor = (id) => (state.verify && state.verify.faults || []).find((f) => f.id === id);
 
-function eventDetail(box, ev) {
+export function eventDetail(box, ev) {
   const f = faultFor(ev.id);
   if (f) {
     box.append(
