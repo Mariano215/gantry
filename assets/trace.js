@@ -7,7 +7,7 @@
 // marker on a single lane. The picture starts sparse, and that sparseness is
 // the finding. It names the handoffs this system does not observe.
 
-import { api } from '/api.js';
+import { api, state } from '/api.js';
 import {
   el, svgEl, clear, mono, panel, loading, actorId, attMark, attRowClass,
   subjectSummary, num, tsShort,
@@ -212,10 +212,34 @@ export async function trace(host, route) {
         flush: true,
       },
       legend(model),
+      gapList(gapsOnScreen(model)),
       spanList(model),
       el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
       detailPane(model, focusId)),
   );
+}
+
+// The holes the verify route already found. That route is read once before any
+// view mounts, so this is the last report rather than a second read. A gap
+// belongs to a run, so only gaps whose run is on screen are drawn.
+function gapsOnScreen(model) {
+  const gaps = (state.verify && state.verify.seq_gaps) || [];
+  return gaps.filter((g) => model.marks.some((m) => m.ev.run_id === g.run_id));
+}
+
+function gapList(gaps) {
+  if (!gaps.length) return null;
+  return el('div', { class: 'trace-gaps' }, gaps.map((g) =>
+    el('div', { class: 'trace-gap' },
+      el('b', {}, `${num(g.missing)} events missing`),
+      el('span', {}, ` between seq ${num(g.after)} and ${num(g.before)} on `),
+      mono(g.run_id),
+      // A finding, never a fault. An altered entry breaks the chain and shows
+      // up as one, so a hole is an event that was never appended, and the log
+      // cannot tell a harness killed mid-run from a producer that numbered an
+      // event it failed to write.
+      el('span', { class: 'faint' },
+        'a hole in the record, not an alteration; an altered entry faults on the chain instead'))));
 }
 
 // A hold and the answer to it, with the real wait between them.

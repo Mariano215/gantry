@@ -423,6 +423,14 @@ refute tracefiltered "tool.request" "an event the filter excludes, so the browse
 expect trace "held " "a hold and the answer to it, linked by the call hash both events record"
 expect trace "refused" "the refusal reads as a refusal and not as a release"
 expect trace "approved" "the grant reads as a grant"
+# The hole in the record, read off the verify route and drawn as a hole. The
+# numbers come from the gap the fixture deliberately made, so a view that drew
+# a gap it invented would not match these.
+expect trace "$GAP_MISSING events missing" "the gap count the verify route reported"
+expect trace "between seq $GAP_AFTER and $GAP_BEFORE" "the gap names the seq either side of the hole"
+expect trace "not an alteration" "a gap is a finding and the page says so"
+refute trace "tampered" "a gap rendered as tampering, which is a distinction the record cannot make"
+
 expect tracedetail "$EVENT_ID" "the detail pane opened by its own route, without a click"
 expect tracedetail "from first," "the pane carries the two deltas, so a reader has the time between marks"
 

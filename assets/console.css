@@ -912,3 +912,8 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
 
 .trace-spans { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); border-bottom: 1px solid var(--line); }
 .trace-span { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; font-size: var(--fs-sm); }
+
+/* A gap is styled apart from a fault on purpose. A hole in the same red as a
+   chain fault would assert a distinction the record cannot make. */
+.trace-gaps { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.trace-gap { border-left: 3px dashed var(--line-strong); padding-left: 10px; }
