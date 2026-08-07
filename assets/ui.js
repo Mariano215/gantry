@@ -20,6 +20,20 @@ export function el(tag, props, ...children) {
   return node;
 }
 
+// The namespaced sibling of el. document.createElement builds an
+// HTMLUnknownElement for a tag like <line>, which lays out as nothing at all,
+// so the trace view needs this and no other view does.
+export function svgEl(tag, props, ...children) {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : String(v));
+  }
+  add(node, children);
+  return node;
+}
+
 function add(node, kids) {
   for (const k of kids) {
     if (k === null || k === undefined || k === false) continue;

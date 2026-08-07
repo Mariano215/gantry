@@ -1483,9 +1483,11 @@ fn approve(
     let ledger = Ledger::open(dir)?;
     let events = ledger.events_with_subjects()?;
 
-    // Pair each decision with the request it answers. The broker appends
-    // tool.request and then exactly one policy.decision, so the pairing is
-    // the emission order rather than a join key that could go stale.
+    // A decision names the call it decided, so the pairing is a join on what
+    // the record carries. Emission order is the fallback for ledgers written
+    // before the decision carried those fields, and it is only right while
+    // calls do not interleave: two requests before one decision put the grant
+    // against a call nothing held, and the broker binds a grant by call hash.
     let mut pending: Option<(&str, &str)> = None;
     let mut found: Option<(String, String)> = None;
     for ev in &events {
@@ -1498,7 +1500,14 @@ fn approve(
                 };
             }
             Some("policy.decision") => {
-                if let Some((id, hash)) = pending.take() {
+                let recorded = match (subj["request_id"].as_str(), subj["call_hash"].as_str()) {
+                    (Some(id), Some(hash)) => Some((id, hash)),
+                    _ => None,
+                };
+                // Taken unconditionally, so a fieldless decision later on the
+                // same ledger cannot consume a request from many events back.
+                let fallback = pending.take();
+                if let Some((id, hash)) = recorded.or(fallback) {
                     if id == request_id {
                         found = Some((
                             hash.to_string(),

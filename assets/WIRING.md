@@ -20,6 +20,7 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("/api.js",       include_str!("../assets/api.js"),   "text/javascript; charset=utf-8"),
     ("/ui.js",        include_str!("../assets/ui.js"),    "text/javascript; charset=utf-8"),
     ("/views.js",     include_str!("../assets/views.js"), "text/javascript; charset=utf-8"),
+    ("/trace.js",     include_str!("../assets/trace.js"), "text/javascript; charset=utf-8"),
 ];
 
 /// Body and content type for a static path. `None` means the caller should
@@ -46,8 +47,9 @@ In the order the console needs:
 2. `asset(path)` returns `Some` — serve that body and content type.
 3. anything else — serve `shell()` with 200.
 
-The three ES modules are requested by absolute path (`/app.js` imports
-`/api.js`, `/ui.js` and `/views.js`), so those exact paths must resolve. A
+The four ES modules are requested by absolute path (`/app.js` imports
+`/api.js`, `/ui.js` and `/views.js`, and `/views.js` imports `/trace.js`), so
+those exact paths must resolve. A
 module served under a content type that is not a JavaScript MIME type is
 refused by the browser and the console renders as a blank shell, so the
 `text/javascript` above is load-bearing, not cosmetic.

@@ -335,10 +335,23 @@ calls it on demand, not on a poll.
   "faults": [
     {"index": 7, "id": "ev-...", "fault": "leaf hash does not match the stored envelope"}
   ],
+  "seq_gaps": [
+    {"run_id": "run-...", "after": 7, "before": 11, "missing": 3}
+  ],
   "head": { "...": "the SignedHead above" },
   "reproduce": "gantry ledger verify /path/to/ledger"
 }
 ```
+
+`seq_gaps` is every hole in a run's `seq`, naming the run, the last seq before
+the hole, the first after it, and how many are missing. It is a finding and
+never a fault, so `ok` stays true with gaps present: a removed entry faults on
+the chain or on a signed head, which means a hole is an event that was never
+appended, and the record cannot tell a harness killed mid-run from a producer
+that numbered an event it failed to write. The front end draws it as a hole in
+the record and must not present it as tampering. The field has existed on the
+verify report since slice 18 and reached this route in slice 21, so no console
+before that could show a gap at all.
 
 `ok` is false when `faults` is non-empty. The `reproduce` string is the exact
 offline command that reaches the same verdict without the server, and the UI

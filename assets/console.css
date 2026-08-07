@@ -798,3 +798,126 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
   }
   tr.is-new > td { box-shadow: inset 0 0 0 1px var(--accent); }
 }
+
+/* ---------- trace ---------- */
+/* One row per lane, marks positioned along a clock shared by every lane. */
+
+.lanes { display: flex; flex-direction: column; }
+
+.lane {
+  display: grid;
+  grid-template-columns: 24ch 1fr;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+.lane:last-child { border-bottom: 0; }
+
+.lane-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 var(--gutter);
+  border-right: 1px solid var(--line-strong);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+}
+
+.lane-track { position: relative; height: 38px; }
+
+.lane-track .mark {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 34ch;
+  overflow: hidden;
+  white-space: nowrap;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.lane-track .mark:hover { border-color: var(--accent); }
+.lane-track .mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A decision is the one mark a reader looks for first, so it carries the
+   policy colour rather than the neutral border. */
+.lane-track .mark[data-kind="policy.decision"] { border-color: var(--accent); }
+
+.trace-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: baseline;
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+
+.lane-stack { position: relative; }
+.lane-stack .edges {
+  position: absolute;
+  top: 0;
+  left: 24ch;
+  width: calc(100% - 24ch);
+  height: 100%;
+  pointer-events: none;
+}
+.edge { stroke: var(--accent); stroke-width: 1.5; opacity: 0.55; }
+.edge-back { stroke-dasharray: 3 2; }
+
+.filter-input {
+  flex: 1 1 40ch;
+  min-width: 24ch;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.filter-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.trace-split { display: grid; grid-template-columns: 1fr minmax(30ch, 46ch); gap: var(--gutter); align-items: start; }
+@media (max-width: 1100px) { .trace-split { grid-template-columns: 1fr; } }
+
+.trace-aside {
+  position: sticky;
+  top: var(--gutter);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.trace-aside-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+.trace-aside p { padding: 8px var(--gutter); }
+.trace-detail { padding: 0 var(--gutter) 8px; }
+
+.trace-spans { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); border-bottom: 1px solid var(--line); }
+.trace-span { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; font-size: var(--fs-sm); }
+
+/* A gap is styled apart from a fault on purpose. A hole in the same red as a
+   chain fault would assert a distinction the record cannot make. */
+.trace-gaps { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.trace-gap { border-left: 3px dashed var(--line-strong); padding-left: 10px; }
+
+/* A cluster stands for more than one event, so it reads as a count rather than
+   as a single mark that happens to be wider. */
+.lane-track .mark-many { border-style: dashed; }

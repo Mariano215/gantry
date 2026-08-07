@@ -405,6 +405,7 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("/api.js", include_str!("../assets/api.js"), JS),
     ("/ui.js", include_str!("../assets/ui.js"), JS),
     ("/views.js", include_str!("../assets/views.js"), JS),
+    ("/trace.js", include_str!("../assets/trace.js"), JS),
 ];
 
 /// A module served under a content type that is not a JavaScript MIME type is
@@ -884,9 +885,10 @@ fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
         .filter_map(|r| Some((r.id.as_str(), r.message.as_deref()?)))
         .collect();
 
-    // The broker appends tool.request and then exactly one policy.decision,
-    // so the pairing is emission order rather than a join key that could go
-    // stale. Same walk as `gantry approve`.
+    // A decision names the call it decided, so the pairing is a join on what
+    // the record carries. Emission order is the fallback for ledgers written
+    // before those fields existed. Same walk as `gantry approve`, and the two
+    // have to agree: this one prints the command that one runs.
     let mut holds: Vec<Hold> = Vec::new();
     let mut pending: Option<(String, String)> = None;
     for ev in &events {
@@ -905,7 +907,25 @@ fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
                 };
             }
             Some("policy.decision") => {
-                let Some((request_id, call_hash)) = pending.take() else {
+                // The decision names its own call since slice 21. Older
+                // ledgers carry neither field, so the adjacency walk stays as
+                // a fallback rather than dropping their holds off the inbox;
+                // it is right only while calls do not interleave, which is
+                // why the recorded pair wins where there is one.
+                let recorded = match (
+                    subject["request_id"].as_str(),
+                    subject["call_hash"].as_str(),
+                ) {
+                    (Some(id), Some(hash)) => Some((id.to_string(), hash.to_string())),
+                    _ => None,
+                };
+                // Taken unconditionally rather than only when the recorded
+                // pair is absent. A ledger holding both shapes, one written
+                // across the upgrade, would otherwise let a later fieldless
+                // decision consume a request from many events back and report
+                // the hold against that call.
+                let fallback = pending.take();
+                let Some((request_id, call_hash)) = recorded.or(fallback) else {
                     continue;
                 };
                 if subject["verdict"].as_str() != Some("hold") {
@@ -1111,8 +1131,26 @@ fn verify(ledger_dir: &str) -> Result<Value, ApiError> {
     let path = std::fs::canonicalize(dir)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ledger_dir.to_string());
+    // The gaps the report already found. A hole in seq is a finding, not a
+    // fault: a removed entry faults on the chain or on a signed head, so a
+    // hole is an event that was never appended, and the log cannot tell a
+    // harness killed mid-run from a producer that numbered an event it failed
+    // to write. Until now nothing on the console could see one at all.
+    let seq_gaps: Vec<Value> = report
+        .seq_gaps
+        .iter()
+        .map(|g| {
+            json!({
+                "run_id": g.run_id,
+                "after": g.after,
+                "before": g.before,
+                "missing": g.missing,
+            })
+        })
+        .collect();
     Ok(json!({
         "ok": report.ok(),
+        "seq_gaps": seq_gaps,
         "entries": report.entries,
         "attestations_verified": report.attestations_verified,
         "attestations_unverified": report.attestations_unverified,

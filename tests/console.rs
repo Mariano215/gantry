@@ -742,3 +742,111 @@ fn a_mutated_event_makes_verify_report_not_ok_and_name_the_entry() {
         "the reader gets the command that checks the server"
     );
 }
+
+/// Two calls interleave: request A, request B, then the decision for A. An
+/// adjacency walk pairs A's decision with B's request and reports the hold
+/// against the wrong call, with the wrong approve command under it. The
+/// correlation the decision itself records gets it right.
+#[test]
+fn a_hold_is_correlated_by_the_recorded_call_and_not_by_position() {
+    let dir = workdir("inbox-correlation").join("ledger");
+    let mut ledger = Ledger::init(&dir).unwrap();
+    for ev in [
+        event(
+            "run-3000",
+            0,
+            "2026-08-07T10:00:00.000Z",
+            "run.open",
+            json!({"workload": "interleaved", "restored_checkpoint": null}),
+        ),
+        event(
+            "run-3000",
+            1,
+            "2026-08-07T10:00:01.000Z",
+            "tool.request",
+            json!({"request_id": "run-3000-req-1", "call_hash": "sha256:aaa", "tool": "Bash", "args": {"command": "git push origin main"}}),
+        ),
+        event(
+            "run-3000",
+            2,
+            "2026-08-07T10:00:02.000Z",
+            "tool.request",
+            json!({"request_id": "run-3000-req-2", "call_hash": "sha256:bbb", "tool": "Bash", "args": {"command": "ls"}}),
+        ),
+        event(
+            "run-3000",
+            3,
+            "2026-08-07T10:00:03.000Z",
+            "policy.decision",
+            json!({
+                "verdict": "hold",
+                "rule": "r-publish",
+                "capability": "vcs.publish",
+                "message": "this call needs an approval before it proceeds",
+                "request_id": "run-3000-req-1",
+                "call_hash": "sha256:aaa"
+            }),
+        ),
+        event(
+            "run-3000",
+            4,
+            "2026-08-07T10:00:04.000Z",
+            "run.seal",
+            json!({"outcome": "complete"}),
+        ),
+    ] {
+        ledger.append(ev).unwrap();
+    }
+
+    let addr = serve(&dir);
+    let body = get(addr, "/api/approvals").json();
+    let holds = body["holds"].as_array().expect("holds is an array");
+    assert_eq!(holds.len(), 1, "one call was held");
+    assert_eq!(
+        holds[0]["call_hash"], "sha256:aaa",
+        "the hold names the call its own decision named, not the request that happened to precede it"
+    );
+    assert_eq!(holds[0]["request_id"], "run-3000-req-1");
+    assert_eq!(holds[0]["state"], "waiting");
+}
+
+/// A run that skips a seq number. The hole is reported and is not a fault:
+/// the record cannot tell a harness killed mid-run from an event a producer
+/// numbered and never appended, so ok stays true and the gap is a finding.
+#[test]
+fn verify_reports_a_seq_gap_and_the_ledger_still_reads_ok() {
+    let dir = workdir("verify-seq-gap").join("ledger");
+    let mut ledger = Ledger::init(&dir).unwrap();
+    for ev in [
+        event(
+            "run-4000",
+            0,
+            "2026-08-07T11:00:00.000Z",
+            "run.open",
+            json!({"workload": "gapped", "restored_checkpoint": null}),
+        ),
+        // seq 1 and 2 are never appended.
+        event(
+            "run-4000",
+            3,
+            "2026-08-07T11:00:03.000Z",
+            "run.seal",
+            json!({"outcome": "complete"}),
+        ),
+    ] {
+        ledger.append(ev).unwrap();
+    }
+
+    let addr = serve(&dir);
+    let body = get(addr, "/api/verify").json();
+    assert_eq!(
+        body["ok"], true,
+        "a hole in seq is a finding and never a fault"
+    );
+    let gaps = body["seq_gaps"].as_array().expect("seq_gaps is an array");
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0]["run_id"], "run-4000");
+    assert_eq!(gaps[0]["after"], 0);
+    assert_eq!(gaps[0]["before"], 3);
+    assert_eq!(gaps[0]["missing"], 2);
+}
