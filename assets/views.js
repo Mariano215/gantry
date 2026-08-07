@@ -2,6 +2,7 @@
 // teardown function, which the router calls before the next view mounts.
 
 import { api, state, ledgerBroken } from '/api.js';
+import { trace } from '/trace.js';
 import {
   el, clear, mono, panel, stat, kv, table, td, jsonPretty, commandBox, errPanel, loading,
   shortHash, shortId, tsShort, tsDate, durationMs, num, actorId,
@@ -940,4 +941,4 @@ export async function verify(host) {
   }
 }
 
-export const views = { overview, ledger, run, policy, trust, inbox, verify };
+export const views = { overview, ledger, run, trace, policy, trust, inbox, verify };

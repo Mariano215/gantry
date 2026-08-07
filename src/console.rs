@@ -405,6 +405,7 @@ const ASSETS: &[(&str, &str, &str)] = &[
     ("/api.js", include_str!("../assets/api.js"), JS),
     ("/ui.js", include_str!("../assets/ui.js"), JS),
     ("/views.js", include_str!("../assets/views.js"), JS),
+    ("/trace.js", include_str!("../assets/trace.js"), JS),
 ];
 
 /// A module served under a content type that is not a JavaScript MIME type is

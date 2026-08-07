@@ -246,7 +246,7 @@ document.addEventListener('keydown', (e) => {
     case 't': cycleTheme(); break;
     default: {
       const n = Number(e.key);
-      if (n >= 1 && n <= 7) {
+      if (n >= 1 && n <= 8) {
         const link = nav.querySelectorAll('a')[n - 1];
         if (link) location.hash = link.getAttribute('href');
       }

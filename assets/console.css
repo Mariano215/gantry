@@ -798,3 +798,55 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
   }
   tr.is-new > td { box-shadow: inset 0 0 0 1px var(--accent); }
 }
+
+/* ---------- trace ---------- */
+/* One row per lane, marks positioned along a clock shared by every lane. */
+
+.lanes { display: flex; flex-direction: column; }
+
+.lane {
+  display: grid;
+  grid-template-columns: 24ch 1fr;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+.lane:last-child { border-bottom: 0; }
+
+.lane-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 var(--gutter);
+  border-right: 1px solid var(--line-strong);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+}
+
+.lane-track { position: relative; height: 38px; }
+
+.lane-track .mark {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 34ch;
+  overflow: hidden;
+  white-space: nowrap;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.lane-track .mark:hover { border-color: var(--accent); }
+.lane-track .mark:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A decision is the one mark a reader looks for first, so it carries the
+   policy colour rather than the neutral border. */
+.lane-track .mark[data-kind="policy.decision"] { border-color: var(--accent); }

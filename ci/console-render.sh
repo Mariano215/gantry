@@ -8,7 +8,7 @@
 # check exists to catch.
 #
 # So: build a small ledger, serve it with the real binary, render each of the
-# seven views in a headless browser, and assert that values taken from that
+# eight views in a headless browser, and assert that values taken from that
 # ledger appear in the rendered DOM. The values are read out of the ledger
 # files at check time, never hardcoded, so the check cannot drift into
 # asserting a constant.
@@ -291,7 +291,7 @@ refute() {
 }
 
 typeset -A ROUTE ORIGIN_OF
-VIEWS=(overview ledger run policy trust inbox verify)
+VIEWS=(overview ledger run trace policy trust inbox verify)
 for view in $VIEWS; do ROUTE[$view]=$view; ORIGIN_OF[$view]=$ORIGIN; done
 # The four routes that reach what a plain view does not: a run's own waterfall,
 # a ledger row opened by its event id, a hold opened by its call hash, and the
@@ -347,6 +347,15 @@ expect run "derived from run.open and run.seal" "the run view mounted rather tha
 # incomplete read, which on this product is the worse failure.
 expect rundetail "$RUN_EVENTS of $RUN_EVENTS" "the waterfall names how many of the run's events it drew, so truncation at the page limit cannot be silent"
 expect rundetail "so this waterfall is the whole run" "the untruncated case says so rather than leaving the reader to assume it"
+
+# Trace: one lane per actor that wrote an event. The labels are read off the
+# fixture ledger at check time, so this cannot drift into asserting a
+# constant, and a lane the view invented would not be in this list.
+for actor in ${(f)"$(jq -rs '[.[].actor.id] | unique | .[]' $L/events.jsonl)"}; do
+  expect trace "$actor" "a lane is an actor that wrote an event on the fixture ledger"
+done
+expect trace "lanes," "the trace panel names how many lanes it drew and how many events of the total"
+expect trace "$HOLD_RULE" "a mark carries its subject summary, so the held decision names its rule on the lane"
 
 # Policy: /api/policy, including the firing count joined off the ledger.
 expect policy "$RULE" "the rule table lists the rule that denied the call"
@@ -414,4 +423,4 @@ expect takeover "It cannot be dismissed" "the banner that survives the dismissal
 refute takeover 'The twelve primitives'
 refute takeover 'Attestation coverage'
 
-echo "seven views, two deep-linked rows and the takeover rendered against a $SIZE-event ledger; head, score, events, events/:id, runs, policy, trust, approvals and verify all reached the screen"
+echo "eight views, two deep-linked rows and the takeover rendered against a $SIZE-event ledger; head, score, events, events/:id, runs, policy, trust, approvals and verify all reached the screen"
