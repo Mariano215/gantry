@@ -347,6 +347,7 @@ function filterBar(expr, shown, page, total, filter) {
     }),
     el('span', { class: 'mono' }, `${num(shown)} of ${num(page)} drawn`),
     el('span', { class: 'faint' }, `${num(total)} match the server-side part of this filter`),
+    whereEachTermRan(filter),
     // A browser-side filter over a page is a filter over a page. Reporting
     // three results while the log holds more would be a complete-looking
     // rendering of an incomplete read, which is the failure this console
@@ -357,6 +358,29 @@ function filterBar(expr, shown, page, total, filter) {
         el('a', { href: `#/trace?f=${encodeURIComponent(narrower(filter))}` },
           'narrow the server-side read'))
       : null);
+}
+
+// Where each term ran, and how it matched. The same syntax means two things
+// depending on which side answered it: kind and run are exact at the API, so
+// kind:tool draws nothing while rule:r- matches four events on a prefix. A
+// filter language that silently changes its matching rule is one people learn
+// to distrust, so the bar says which rule applied to which term rather than
+// leaving the reader to infer it from an empty page.
+function whereEachTermRan(filter) {
+  const parts = [];
+  const server = Object.keys(filter.server);
+  if (server.length) {
+    const exact = server.filter((f) => f !== 'actor' && f !== 'since');
+    const loose = server.filter((f) => f === 'actor');
+    if (exact.length) parts.push(`${exact.join(', ')} on the server, whole value`);
+    if (loose.length) parts.push(`${loose.join(', ')} on the server, substring`);
+    if (server.includes('since')) parts.push('since on the server, at or after');
+  }
+  const client = filter.client.map((t) => t.field);
+  if (client.length) parts.push(`${[...new Set(client)].join(', ')} in the browser, substring`);
+  if (filter.words.length) parts.push('bare text in the browser, substring');
+  if (!parts.length) return null;
+  return el('span', { class: 'faint' }, parts.join('; '));
 }
 
 // The same expression with only the terms the API can answer, which is the

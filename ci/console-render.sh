@@ -414,6 +414,10 @@ refute trace "0 edges observed" "an edge count of zero on a ledger whose tool.re
 expect tracefiltered "drawn" "the filter bar states how many of the page it drew"
 expect tracefiltered "match the server-side part of this filter" "the bar states what the server matched, so a browser-side count is never read as the log"
 expect tracefiltered "$RULE" "the filtered trace drew the denial the fixture recorded"
+# The same syntax matches a whole value at the API and a substring in the
+# browser, so the bar names which rule applied to which term. Without this a
+# reader who typed kind:tool sees an empty page and no reason for it.
+expect tracefiltered "in the browser, substring" "the bar says where each term ran and how it matched"
 refute tracefiltered "tool.request" "an event the filter excludes, so the browser-side half of the filter never ran"
 
 # The held spans, and the pane opened by its own route. Both approvals on this
