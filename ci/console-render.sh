@@ -139,6 +139,7 @@ fi
 ROOT=$(tail -1 $L/heads.jsonl | jq -r .root_hash)
 KEY=$(tail -1 $L/heads.jsonl | jq -r .key_id)
 SIZE=$(tail -1 $L/heads.jsonl | jq -r .size)
+EVENTS_N=$(wc -l < $L/events.jsonl | tr -d ' ')
 RUN=$(jq -rs '[.[] | select(.kind=="run.open")] | last | .run_id' $L/events.jsonl)
 # Every event carrying that run id. The run view prints this as "N of N" from
 # the total /api/events reports, so a run truncated at the page limit says so
@@ -408,6 +409,22 @@ done
 # Both numbers, not the word "lanes,", which passes with zero of everything.
 expect trace "$SIZE of $SIZE events drawn" "the unfiltered trace drew every event the ledger holds and says so"
 expect trace "$HOLD_RULE" "a mark carries its subject summary, so the held decision names its rule on the lane"
+# Marks and events are different counts whenever two events resolve to the same
+# position on a lane, which a real ledger does constantly: the fixture's own
+# events land inside a few milliseconds of each other. The legend states both,
+# so a track showing fewer marks than the lane head counts is explained rather
+# than being a page showing part of the record as the whole of it.
+expect trace "for $EVENTS_N events" "the legend states how many events the marks stand for"
+# The fixture writes several events per lane inside the same millisecond, so a
+# view that drew one mark per event would be painting marks over each other.
+# The guard is the point: if the fixture ever stops colliding, this refute
+# would pass for the wrong reason.
+DUPS=$(jq -rs '[group_by(.actor.id)[] | group_by(.ts)[] | length] | map(select(. > 1)) | length' $L/events.jsonl)
+if [ "$DUPS" = "0" ]; then
+  echo "no two events on the fixture ledger share a lane and a timestamp, so the refute below could not tell a clustering view from one that paints marks on top of each other. Fix: the fixture got slower or the clock got finer; build a ledger with concurrent events and re-run"
+  exit 1
+fi
+refute trace "$EVENTS_N marks for $EVENTS_N events" "one mark per event on a ledger whose events share positions, so marks are being painted over each other"
 expect trace "edges observed" "the legend states how many edges the record carried"
 expect trace "inferred: 0" "the legend states what the picture refused to draw, not only what it drew"
 # The fixture runs Bash calls, so a tool lane exists and an edge reaches it.

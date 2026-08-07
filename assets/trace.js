@@ -456,7 +456,13 @@ function edgeLayer(model, laneIndex) {
 }
 
 function legend(model) {
+  const drawn = model.lanes.reduce((a, l) => a + cluster(l.marks, model).length, 0);
   return el('div', { class: 'trace-legend' },
+    // Always both numbers, never only when they differ. A reader who sees
+    // fewer marks than the lane heads count needs the relationship stated, and
+    // one who sees them equal needs to know that is what equal looks like.
+    el('span', { class: 'mono' },
+      `${num(drawn)} marks for ${num(model.marks.length)} events`),
     el('span', { class: 'mono' }, `${num(model.edges.length)} edges observed`),
     // Printed even though it is zero by construction. A diagram people trust
     // has to say what it refused to draw.
@@ -465,28 +471,66 @@ function legend(model) {
       'an arrow is drawn only where a producer recorded a peer; every other event is a marker on one lane'));
 }
 
+// How many positions along a lane are distinguishable. Marks resolving to the
+// same one are drawn as a single mark carrying its count, because a mark
+// painted over another is a page showing part of the record as the whole of
+// it: measured on a real ledger, eight events inside 7ms of a 220ms run all
+// landed within 3% of the track while each mark is about 34ch wide, so the
+// lane head said 8 and the track showed one.
+// ponytail: fixed resolution, because the track's pixel width is not known
+// here. Measure the track and bucket by mark width if the clusters get coarse.
+const TRACK_SLOTS = 200;
+
+function cluster(marks, model) {
+  const slots = new Map();
+  for (const m of marks) {
+    const pct = (m.offsetMs / model.span) * 100;
+    const slot = Math.round((pct / 100) * TRACK_SLOTS);
+    if (!slots.has(slot)) slots.set(slot, []);
+    slots.get(slot).push(m);
+  }
+  return [...slots.entries()].map(([slot, group]) => ({ slot, group }));
+}
+
 function laneBoard(model) {
   return el('div', { class: 'lanes' }, model.lanes.map((lane) =>
     el('div', { class: 'lane', 'data-lane': lane.id },
       el('div', { class: 'lane-head' },
         mono(lane.id),
         el('span', { class: 'faint' }, `${num(lane.marks.length)} events`)),
-      el('div', { class: 'lane-track' }, lane.marks.map((m) => markNode(m, model))))));
+      el('div', { class: 'lane-track' },
+        cluster(lane.marks, model).map((c) => markNode(c, model))))));
 }
 
-function markNode(m, model) {
-  const pct = (m.offsetMs / model.span) * 100;
+function markNode(c, model) {
+  const group = c.group;
+  const m = group[0];
+  const many = group.length > 1;
+  const pct = (c.slot / TRACK_SLOTS) * 100;
+  const kinds = [...new Set(group.map((g) => g.ev.kind))];
   return el('button', {
-    class: `mark ${attRowClass(m.ev)}`,
+    class: `mark ${attRowClass(m.ev)}${many ? ' mark-many' : ''}`,
     type: 'button',
     'data-kind': m.ev.kind,
     'data-event': m.ev.id,
+    'data-events': String(group.length),
     style: `left:${Math.min(99.5, Math.max(0, pct))}%`,
-    title: `${m.ev.kind} at ${tsShort(m.ev.ts)}, +${(m.offsetMs / 1000).toFixed(3)}s from first, +${(m.deltaMs / 1000).toFixed(3)}s from previous`,
+    title: many
+      // Every event in the cluster is named here, so nothing is hidden even
+      // where the track cannot separate them. The others are reachable by
+      // filtering, which is what the link in the pane is for.
+      ? `${group.length} events at this position:\n${group.map((g) => `${g.ev.kind} at ${tsShort(g.ev.ts)}`).join('\n')}`
+      : `${m.ev.kind} at ${tsShort(m.ev.ts)}, +${(m.offsetMs / 1000).toFixed(3)}s from first, +${(m.deltaMs / 1000).toFixed(3)}s from previous`,
     // A route rather than a handler that mutates, so the pane is reachable by
     // link and the render gate can open it without a browser driver.
     onclick: () => {
       location.hash = `#/trace/event/${encodeURIComponent(m.ev.id)}`;
     },
-  }, attMark(m.ev), mono(m.ev.kind), subjectSummary(m.ev));
+  }, attMark(m.ev),
+  many
+    ? el('span', { class: 'mono' }, `${num(group.length)} events`)
+    : mono(m.ev.kind),
+  many
+    ? el('span', { class: 'faint trunc' }, kinds.join(', '))
+    : subjectSummary(m.ev));
 }
