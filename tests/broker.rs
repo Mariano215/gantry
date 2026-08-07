@@ -1242,3 +1242,40 @@ fn the_rung_a_denial_cost_gates_the_next_call() {
         "the earned rung after one denial gates this call, not the declared autonomous"
     );
 }
+
+/// A decision names the call it decided. Without the two fields a reader has
+/// to pair each decision with the tool.request immediately before it in the
+/// log, which is a correlation the record does not carry and which does not
+/// survive interleaved calls.
+#[test]
+fn a_decision_names_the_call_it_decided_rather_than_relying_on_adjacency() {
+    let dir = workdir("decision-names-call");
+    // A held call, so the decision under test is one an approver answers.
+    let (mut run, led) = open_run(&dir, "decision-names-call");
+    run.call("Bash", "git push origin main").unwrap_err();
+    run.seal("complete").unwrap();
+
+    let evs = events(&led);
+    let request = evs
+        .iter()
+        .find(|e| e["kind"] == "tool.request")
+        .expect("the run recorded a tool.request");
+    let decision = evs
+        .iter()
+        .find(|e| e["kind"] == "policy.decision")
+        .expect("the run recorded a policy.decision");
+    let req_subject = subject(&led, request);
+    let dec_subject = subject(&led, decision);
+
+    assert_eq!(
+        dec_subject["request_id"], req_subject["request_id"],
+        "the decision must name the request it decided, so a reader correlates without walking the log"
+    );
+    assert_eq!(
+        dec_subject["call_hash"], req_subject["call_hash"],
+        "the decision must name the call hash, which is what an approval binds to"
+    );
+    // The decision it computed is untouched by the addition.
+    assert_eq!(dec_subject["verdict"], "hold");
+    assert!(dec_subject["rule"].as_str().is_some());
+}

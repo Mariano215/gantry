@@ -421,12 +421,22 @@ impl BrokerRun {
         let obligation = decision.obligation.clone();
         let message = decision.message.clone();
         let rule = decision.rule.clone();
-        let decision_subject = serde_json::to_value(&decision).map_err(|e| {
+        let mut decision_subject = serde_json::to_value(&decision).map_err(|e| {
             Fault::new(
                 format!("decision does not serialise: {e}"),
                 "report this as a bug; Decision is serialisable by construction",
             )
         })?;
+        // The decision names the call it decided. Without this a reader has to
+        // pair each decision with the tool.request before it in the log, which
+        // is a correlation the record does not carry and which does not
+        // survive interleaved calls. An approval binds to the call hash, so
+        // the hold and the grant that answers it are linkable from the record
+        // alone.
+        if let Some(obj) = decision_subject.as_object_mut() {
+            obj.insert("request_id".to_string(), json!(request_id));
+            obj.insert("call_hash".to_string(), json!(call_hash));
+        }
         self.core.append("policy.decision", decision_subject)?;
         match verdict {
             Action::Deny => {

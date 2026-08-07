@@ -131,7 +131,7 @@ Defined here because a stranger cannot verify what is not written down
 | `model.call` | 02 · 03 · 11 | Provider, model, declared inputs and whether each arrived, window budget and actual, token counts, cost, latency, prompt hash. Never the raw prompt in `laptop`+ profiles where retention says otherwise: hash and store separately. |
 | `tool.request` | 04 · 05 | Tool id, schema version, canonical args, sandbox kind, egress allowlist hash, credential handles requested. Emitted when the call is issued, so a call that blocks, hangs or dies is on the record while it is still outstanding (finding e/1). |
 | `tool.result` | 04 · 05 | `request_id` of the matching `tool.request`, outcome (`ok`, `denied`, `blocked`, `timeout`, `killed`), result hash, taint flag, duration. A request with no result is exactly what an auditor wants to see, and now can. |
-| `policy.decision` | 12 | Verdict (allow, deny, hold), the rule that fired, policy version, and the request it applied to. A deny is never inferred from an absent allow; it is an event. |
+| `policy.decision` | 12 | Verdict (allow, deny, hold), the rule that fired, policy version, and the request it applied to. A deny is never inferred from an absent allow; it is an event. Carries `request_id` and `call_hash` since slice 21: the request this decision answered, and the call's own identity, which is the value an `approval` binds to. A reader correlates a hold with the grant that released it from these two fields and never from position in the log. |
 | `sensor.verdict` | 10 | Sensor id, kind (computational, inferential), lifecycle placement, pass or fail, whether it blocked, and the fix-naming message. |
 | `approval` | 07 · 12 | Approver identity and source, **verdict (`approve`, `deny`)**, the `call_hash` and `rule` it answers, the `request_id` that prompted it, and a `grant_id`. A human refusing is an approval with `verdict: deny`, not an absent event (finding 5). Written by `gantry approve`, which refuses an approver the trust budget does not permit and refuses any request that did not resolve to `hold`, so an approval never reverses a denial. |
 | `approval.use` | 07 · 12 | The `grant_id` spent, the `call_hash` and `request_id` it released, the approver, and `self_approved` when the approver is the calling identity. Emitted by the broker when a held call finds its approval, so a grant releases exactly one call. The `policy.decision` for that call still reads `hold`: the policy held it, and the release is a separate fact rather than a rewriting of the first one. |
@@ -154,6 +154,11 @@ requests issued in one turn may complete in either order; `tool.result` events
 carry `request_id`, so causal reconstruction never depends on `seq`
 adjacency. A reader who needs issue order sorts `tool.request` events by
 `ts`; a reader who needs completion order uses `seq`.
+
+`policy.decision` carries the same two fields for the same reason. Until slice
+21 it carried neither, so the only way to tell which call a decision decided
+was to take the `tool.request` immediately before it, which this section
+already said a reader must not do.
 
 ## Migration note
 
