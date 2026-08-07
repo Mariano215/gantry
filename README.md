@@ -227,7 +227,7 @@ $ sandbox-exec -p '(version 1)(allow default)(deny network*)' \
 inclusion verified: entry 4 (id run-1785937403180-4) under signed head size 15
 ```
 
-The bundle is 1673 bytes: one envelope, its index, a three-element proof and
+The bundle is 1673 bytes: one envelope, its index, a four-element proof and
 one signed head. That is the whole evidence package for "this decision was on
 the log, in this position, at this size."
 
