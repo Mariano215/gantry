@@ -245,6 +245,20 @@ export async function trace(host, route) {
   );
 }
 
+// What this lane's verified signatures are worth. A signature under a
+// published seed proves which run wrote the event and not who operated it, so
+// it is never rendered as a bare count beside one under a held key.
+function attestedCell(r) {
+  if (!r.fixture && !r.registered) return el('span', { class: 'faint' }, 'none verified');
+  return el('span', {},
+    r.registered ? el('span', { class: 'mono' }, `${num(r.registered)} registered`) : null,
+    r.registered && r.fixture ? ', ' : null,
+    r.fixture
+      ? el('span', { class: 'att att-fixture mono', title: 'signed under a key whose seed is published; anyone holding the repository can produce one' },
+        `${num(r.fixture)} under a published seed`)
+      : null);
+}
+
 function laneStats(model) {
   const rows = model.lanes.map((lane) => {
     const marks = lane.marks;
@@ -258,6 +272,15 @@ function laneStats(model) {
         .filter((s) => s.from.lane === lane.id)
         .reduce((a, s) => a + s.ms, 0),
       unattested: marks.filter((m) => m.ev._attestation_state !== 'verified').length,
+      // A verified signature is worth what its key is worth. Counting a
+      // published-seed signature as plain attested is the lie the ledger
+      // exists to rule out, and this column dropped the qualifier that
+      // docs/CONSOLE-API.md requires and that attMark already renders on
+      // every mark.
+      fixture: marks.filter((m) => m.ev._attestation_state === 'verified'
+        && m.ev._attestation_trust === 'fixture').length,
+      registered: marks.filter((m) => m.ev._attestation_state === 'verified'
+        && m.ev._attestation_trust !== 'fixture').length,
     };
   }).sort((a, b) => b.denials - a.denials || b.marks.length - a.marks.length);
 
@@ -272,6 +295,7 @@ function laneStats(model) {
       { label: 'lane', width: '26ch' }, { label: 'events', num: true, width: '9ch' },
       { label: 'denials', num: true, width: '9ch' }, { label: 'holds', num: true, width: '8ch' },
       { label: 'held', num: true, width: '9ch' }, { label: 'unattested', num: true, width: '12ch' },
+      { label: 'attested', width: '24ch' },
       { label: 'first', num: true, width: '10ch' }, { label: 'last', num: true, width: '10ch' },
     ],
     rows.map((r) => el('tr', {},
@@ -281,6 +305,7 @@ function laneStats(model) {
       td(r.holds ? el('span', { class: 'tag tag-warn' }, num(r.holds)) : zero(), 'num'),
       td(r.heldMs ? mono(`${(r.heldMs / 1000).toFixed(1)}s`) : zero(), 'num'),
       td(r.unattested ? el('span', { class: 'warn-text mono' }, num(r.unattested)) : zero(), 'num'),
+      td(attestedCell(r)),
       td(r.marks.length ? mono(`+${(r.marks[0].offsetMs / 1000).toFixed(2)}s`) : none(), 'num'),
       td(r.marks.length
         ? mono(`+${(r.marks[r.marks.length - 1].offsetMs / 1000).toFixed(2)}s`)

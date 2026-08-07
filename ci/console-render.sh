@@ -492,6 +492,18 @@ if [ -z "$UNATT_N" ] || [ "$UNATT_N" = "null" ]; then
   exit 1
 fi
 expect trace "class=\"warn-text mono\">$UNATT_N<" "the per-lane unattested count, taken off the ledger rather than from the column header"
+# The other half of the same question. This ledger is signed under the tracked
+# laptop key, whose seed is published, so every verified signature here proves
+# which run wrote the event and not who operated it. A lane that counted those
+# as plain attested would render identically to one signed under a held key,
+# which is the distinction docs/CONSOLE-API.md requires the console to keep.
+FIXTURE_N=$(jq -rs '[group_by(.actor.id)[] | [.[] | select(.attestation != null)] | length] | max' $L/events.jsonl)
+if [ -z "$FIXTURE_N" ] || [ "$FIXTURE_N" = "0" ] || [ "$FIXTURE_N" = "null" ]; then
+  echo "no lane on the fixture ledger carries a signed event, so the qualifier below would be asserted against a ledger with nothing to qualify. Fix: the laptop profile stopped signing; check profile_requirements.attestation in config/policy.json"
+  exit 1
+fi
+expect trace "$FIXTURE_N under a published seed" "the per-lane attested count carries what its key is worth"
+refute trace "class=\"num\"><span class=\"mono\">$FIXTURE_N</span></td><td>" "a bare attested count with no qualifier beside it"
 refute trace "class=\"warn-text mono\">$UNATT_TOTAL<" "every event on that lane counted as unattested, which is what reading the attestation state under the wrong name produces"
 
 # Both of these must be things ONLY the pane renders. The first pair written
