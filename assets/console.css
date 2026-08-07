@@ -850,3 +850,25 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
 /* A decision is the one mark a reader looks for first, so it carries the
    policy colour rather than the neutral border. */
 .lane-track .mark[data-kind="policy.decision"] { border-color: var(--accent); }
+
+.trace-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: baseline;
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+
+.lane-stack { position: relative; }
+.lane-stack .edges {
+  position: absolute;
+  top: 0;
+  left: 24ch;
+  width: calc(100% - 24ch);
+  height: 100%;
+  pointer-events: none;
+}
+.edge { stroke: var(--accent); stroke-width: 1.5; opacity: 0.55; }
+.edge-back { stroke-dasharray: 3 2; }

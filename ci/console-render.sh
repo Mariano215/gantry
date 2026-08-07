@@ -356,6 +356,11 @@ for actor in ${(f)"$(jq -rs '[.[].actor.id] | unique | .[]' $L/events.jsonl)"}; 
 done
 expect trace "lanes," "the trace panel names how many lanes it drew and how many events of the total"
 expect trace "$HOLD_RULE" "a mark carries its subject summary, so the held decision names its rule on the lane"
+expect trace "edges observed" "the legend states how many edges the record carried"
+expect trace "inferred: 0" "the legend states what the picture refused to draw, not only what it drew"
+# The fixture runs Bash calls, so a tool lane exists and an edge reaches it.
+expect trace "tool:Bash" "a peer lane created from the tool a tool.request recorded"
+refute trace "0 edges observed" "an edge count of zero on a ledger whose tool.request events name a tool, so the peer never resolved"
 
 # Policy: /api/policy, including the firing count joined off the ledger.
 expect policy "$RULE" "the rule table lists the rule that denied the call"

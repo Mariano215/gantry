@@ -9,7 +9,7 @@
 
 import { api } from '/api.js';
 import {
-  el, clear, mono, panel, loading, actorId, attMark, attRowClass,
+  el, svgEl, clear, mono, panel, loading, actorId, attMark, attRowClass,
   subjectSummary, num, tsShort,
 } from '/ui.js';
 
@@ -60,7 +60,40 @@ export function derive(events) {
     marks.push(mark);
   }
 
-  return { lanes: [...lanes.values()], marks, edges: [], spans: [], t0, span };
+  // An edge exists where a producer recorded a peer, and nowhere else. The
+  // return leg of a tool call is a second edge, drawn only because tool.result
+  // carries the request_id of the request it answers.
+  const edges = [];
+  const openByRequest = new Map();
+  for (const m of marks) {
+    const s = m.ev._subject || {};
+    if (m.peer) {
+      edges.push({
+        from: m.lane,
+        to: m.peer,
+        at: m.at,
+        offsetMs: m.offsetMs,
+        ev: m.ev,
+        durationMs: typeof s.latency_ms === 'number' ? s.latency_ms : null,
+        back: false,
+      });
+      if (s.request_id) openByRequest.set(s.request_id, m);
+    }
+    if (m.ev.kind === 'tool.result' && s.request_id && openByRequest.has(s.request_id)) {
+      const req = openByRequest.get(s.request_id);
+      edges.push({
+        from: req.peer,
+        to: m.lane,
+        at: m.at,
+        offsetMs: m.offsetMs,
+        ev: m.ev,
+        durationMs: typeof s.duration_ms === 'number' ? s.duration_ms : null,
+        back: true,
+      });
+    }
+  }
+
+  return { lanes: [...lanes.values()], marks, edges, spans: [], t0, span };
 }
 
 export async function trace(host, route) {
@@ -73,6 +106,7 @@ export async function trace(host, route) {
     : { limit: EVENT_PAGE_MAX });
   const events = res.events || [];
   const model = derive(events);
+  const laneIndex = new Map(model.lanes.map((l, i) => [l.id, i]));
 
   clear(body).append(
     el('div', { class: 'filters' },
@@ -81,8 +115,45 @@ export async function trace(host, route) {
     panel('Trace', {
       sub: `${num(model.lanes.length)} lanes, ${num(events.length)} of ${num(res.total)} events drawn`,
       flush: true,
-    }, laneBoard(model)),
+    },
+    legend(model),
+    el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
   );
+}
+
+// Edges are drawn in one SVG layer behind the marks, because a line between
+// two rows is not a child of either.
+function edgeLayer(model, laneIndex) {
+  const rowH = 39;
+  const height = Math.max(model.lanes.length * rowH, rowH);
+  return svgEl('svg', {
+    class: 'edges',
+    viewBox: `0 0 1000 ${height}`,
+    preserveAspectRatio: 'none',
+    'aria-hidden': 'true',
+  }, model.edges.map((e) => {
+    const from = laneIndex.get(e.from);
+    const to = laneIndex.get(e.to);
+    if (from === undefined || to === undefined) return null;
+    const x = Math.min(998, Math.max(2, (e.offsetMs / model.span) * 1000));
+    return svgEl('line', {
+      x1: x,
+      y1: from * rowH + rowH / 2,
+      x2: x,
+      y2: to * rowH + rowH / 2,
+      class: e.back ? 'edge edge-back' : 'edge',
+    });
+  }));
+}
+
+function legend(model) {
+  return el('div', { class: 'trace-legend' },
+    el('span', { class: 'mono' }, `${num(model.edges.length)} edges observed`),
+    // Printed even though it is zero by construction. A diagram people trust
+    // has to say what it refused to draw.
+    el('span', { class: 'mono faint' }, 'inferred: 0'),
+    el('span', { class: 'faint' },
+      'an arrow is drawn only where a producer recorded a peer; every other event is a marker on one lane'));
 }
 
 function laneBoard(model) {
