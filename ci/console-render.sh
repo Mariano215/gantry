@@ -96,6 +96,45 @@ REQ_RELEASED=$(request_field "git push origin docs" request_id)
 $BIN approve $L $REQ_REFUSED user:mariano@local deny >/dev/null
 $BIN approve $L $REQ_RELEASED user:mariano@local >/dev/null
 
+# -- a run whose seq skips -----------------------------------------------------
+#
+# The trace view draws a hole in a run's numbering, so the fixture has to
+# contain one. It cannot be made by editing the file: seq is inside the
+# envelope the leaf hash covers, so rewriting it, or deleting a line, breaks the
+# chain and the Merkle root and verification reports a fault. A gap is not a
+# fault, and a fixture that produced one by breaking the log would render the
+# takeover instead of the view under test.
+#
+# So the gap is made the way a real one is made: a producer numbers an event and
+# never writes it. `gantry ledger append` is the honest path, a real append
+# through the real binary, and the appended event carries a seq above the one
+# the run last recorded. The two seqs in between were never written, which is
+# exactly what the report says about them.
+GAP_RUN=$(jq -rs '[.[] | select(.kind=="run.open")] | last | .run_id' $L/events.jsonl)
+GAP_AFTER=$(jq -rs --arg r "$GAP_RUN" '[.[] | select(.run_id==$r) | .seq] | max' $L/events.jsonl)
+GAP_MISSING=2
+GAP_BEFORE=$(( GAP_AFTER + GAP_MISSING + 1 ))
+jq -cs --arg r "$GAP_RUN" --argjson seq $GAP_BEFORE '
+  [.[] | select(.run_id==$r)] | last
+  | { id: "\($r)-\($seq)", run_id: $r, parent_id: .id, seq: $seq, ts: .ts,
+      kind: "trace.resume", actor: .actor, authority: .authority,
+      subject: { note: "the harness stopped writing and resumed at a later seq; the events in between were numbered and never appended",
+                 missing: [(.seq + 1), ($seq - 1)] } }' \
+  $L/events.jsonl | $BIN ledger append $L >/dev/null
+
+# The guard the tampered copy has, in the other direction: this append must
+# leave the ledger verifying clean and must actually produce the gap. A fixture
+# that silently made a fault, or no hole at all, would give the trace view
+# nothing to draw and the assertions below would test nothing.
+if ! VERIFY_OUT=$($BIN ledger verify $L); then
+  echo "the gap append left the fixture ledger failing verification, so the trace view would render the takeover instead. Fix: gantry ledger append no longer takes the NewEvent shape built above; run it by hand against a fresh ledger and read the failure\n$VERIFY_OUT"
+  exit 1
+fi
+if ! print -r -- "$VERIFY_OUT" | grep -q "seq gap in run $GAP_RUN: last seq before the gap $GAP_AFTER, next seq after it $GAP_BEFORE, $GAP_MISSING event"; then
+  echo "the fixture ledger reports no seq gap in run $GAP_RUN, so the trace view's gap rendering would be asserted against a run with no hole in it. Fix: compare the seq the append above chose against seq_gaps in src/ledger.rs\n$VERIFY_OUT"
+  exit 1
+fi
+
 # The expected values, read off the ledger rather than written down here.
 ROOT=$(tail -1 $L/heads.jsonl | jq -r .root_hash)
 KEY=$(tail -1 $L/heads.jsonl | jq -r .key_id)
@@ -301,8 +340,11 @@ ROUTE[rundetail]="run/$RUN"; ORIGIN_OF[rundetail]=$ORIGIN
 ROUTE[eventrow]="ledger/$EVENT_ID"; ORIGIN_OF[eventrow]=$ORIGIN
 ROUTE[holdrow]="inbox/$CALL_WAITING"; ORIGIN_OF[holdrow]=$ORIGIN
 ROUTE[takeover]="overview"; ORIGIN_OF[takeover]=$BROKEN_ORIGIN
+# The trace under a filter whose term the events route cannot answer, so the
+# browser-side half runs and the bar has both numbers to report.
+ROUTE[tracefiltered]="trace?f=verdict%3Adeny"; ORIGIN_OF[tracefiltered]=$ORIGIN
 
-ALL=($VIEWS rundetail eventrow holdrow takeover)
+ALL=($VIEWS rundetail eventrow holdrow takeover tracefiltered)
 WAVE=4
 i=1
 while (( i <= $#ALL )); do
@@ -361,6 +403,15 @@ expect trace "inferred: 0" "the legend states what the picture refused to draw, 
 # The fixture runs Bash calls, so a tool lane exists and an edge reaches it.
 expect trace "tool:Bash" "a peer lane created from the tool a tool.request recorded"
 refute trace "0 edges observed" "an edge count of zero on a ledger whose tool.request events name a tool, so the peer never resolved"
+
+# The filtered trace. verdict is not a term /api/events answers, so it runs in
+# the browser over the page that route returned, and the bar has to report both
+# numbers. A browser-side count printed alone would say the log holds one
+# denial, which is a complete-looking rendering of an incomplete read.
+expect tracefiltered "drawn" "the filter bar states how many of the page it drew"
+expect tracefiltered "match the server-side part of this filter" "the bar states what the server matched, so a browser-side count is never read as the log"
+expect tracefiltered "$RULE" "the filtered trace drew the denial the fixture recorded"
+refute tracefiltered "tool.request" "an event the filter excludes, so the browser-side half of the filter never ran"
 
 # Policy: /api/policy, including the firing count joined off the ledger.
 expect policy "$RULE" "the rule table lists the rule that denied the call"

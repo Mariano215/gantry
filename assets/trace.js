@@ -30,6 +30,60 @@ function peerOf(ev) {
   return f(ev._subject || {});
 }
 
+// Terms the events route can answer. Everything else runs in the browser over
+// the page that route returned, which is why the bar reports both numbers.
+const SERVER_FIELDS = new Set(['kind', 'run', 'actor', 'since']);
+const CLIENT_FIELDS = new Set([
+  'lane', 'verdict', 'rule', 'capability', 'tool', 'provider', 'att', 'call', 'request',
+]);
+
+export function parseFilter(text) {
+  const server = {};
+  const client = [];
+  const words = [];
+  for (const raw of String(text || '').trim().split(/\s+/).filter(Boolean)) {
+    const negate = raw.startsWith('!');
+    const token = negate ? raw.slice(1) : raw;
+    const i = token.indexOf(':');
+    const field = i > 0 ? token.slice(0, i) : null;
+    const value = i > 0 ? token.slice(i + 1) : token;
+    if (field && SERVER_FIELDS.has(field) && !negate) server[field] = value;
+    else if (field && (SERVER_FIELDS.has(field) || CLIENT_FIELDS.has(field))) {
+      client.push({ field, value, negate });
+    } else words.push(value.toLowerCase());
+  }
+  return { server, client, words };
+}
+
+const FIELD_OF = {
+  lane: (ev) => actorId(ev.actor),
+  actor: (ev) => actorId(ev.actor),
+  kind: (ev) => ev.kind,
+  run: (ev) => ev.run_id,
+  att: (ev) => ev._attestation_state,
+  verdict: (ev) => (ev._subject || {}).verdict,
+  rule: (ev) => (ev._subject || {}).rule,
+  capability: (ev) => (ev._subject || {}).capability,
+  tool: (ev) => (ev._subject || {}).tool,
+  provider: (ev) => (ev._subject || {}).provider,
+  call: (ev) => (ev._subject || {}).call_hash,
+  request: (ev) => (ev._subject || {}).request_id,
+};
+
+export function matches(ev, filter) {
+  for (const t of filter.client) {
+    const read = FIELD_OF[t.field];
+    const got = String((read ? read(ev) : null) ?? '');
+    const hit = got === t.value || got.includes(t.value);
+    if (hit === t.negate) return false;
+  }
+  if (filter.words.length) {
+    const hay = JSON.stringify(ev).toLowerCase();
+    if (!filter.words.every((w) => hay.includes(w))) return false;
+  }
+  return true;
+}
+
 export function derive(events) {
   const lanes = new Map();
   const laneFor = (id) => {
@@ -101,17 +155,20 @@ export async function trace(host, route) {
   clear(host).append(body);
 
   const run = route.segments[1] ? decodeURIComponent(route.segments[1]) : null;
-  const res = await api.events(run
-    ? { run, limit: EVENT_PAGE_MAX }
-    : { limit: EVENT_PAGE_MAX });
-  const events = res.events || [];
+  const expr = route.query.f
+    ? decodeURIComponent(route.query.f)
+    : (run ? `run:${run}` : '');
+  const filter = parseFilter(expr);
+  if (run) filter.server.run = run;
+
+  const res = await api.events({ ...filter.server, limit: EVENT_PAGE_MAX });
+  const page = res.events || [];
+  const events = page.filter((ev) => matches(ev, filter));
   const model = derive(events);
   const laneIndex = new Map(model.lanes.map((l, i) => [l.id, i]));
 
   clear(body).append(
-    el('div', { class: 'filters' },
-      run ? el('a', { href: '#/trace' }, 'all runs') : null,
-      run ? el('span', { class: 'mono' }, run) : null),
+    filterBar(expr, events.length, page.length, res.total, filter),
     panel('Trace', {
       sub: `${num(model.lanes.length)} lanes, ${num(events.length)} of ${num(res.total)} events drawn`,
       flush: true,
@@ -119,6 +176,44 @@ export async function trace(host, route) {
     legend(model),
     el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
   );
+}
+
+function filterBar(expr, shown, page, total, filter) {
+  const clientRan = filter.client.length > 0 || filter.words.length > 0;
+  const truncated = Number(total) > page;
+  const terms = filter.client
+    .map((t) => t.field)
+    .concat(filter.words.length ? ['text'] : []);
+  return el('div', { class: 'filters' },
+    el('input', {
+      class: 'filter-input mono',
+      type: 'text',
+      value: expr,
+      'data-filter': '',
+      placeholder: 'kind:policy.decision verdict:deny capability:vcs.publish',
+      'aria-label': 'trace filter',
+      onchange: (e) => {
+        location.hash = `#/trace?f=${encodeURIComponent(e.target.value)}`;
+      },
+    }),
+    el('span', { class: 'mono' }, `${num(shown)} of ${num(page)} drawn`),
+    el('span', { class: 'faint' }, `${num(total)} match the server-side part of this filter`),
+    // A browser-side filter over a page is a filter over a page. Reporting
+    // three results while the log holds more would be a complete-looking
+    // rendering of an incomplete read, which is the failure this console
+    // refuses everywhere else.
+    clientRan && truncated
+      ? el('span', { class: 'warn-text' },
+        `${terms.join(', ')} ran in the browser over the first ${num(page)} matching events, not over the log. `,
+        el('a', { href: `#/trace?f=${encodeURIComponent(narrower(filter))}` },
+          'narrow the server-side read'))
+      : null);
+}
+
+// The same expression with only the terms the API can answer, which is the
+// read that makes the count whole.
+function narrower(filter) {
+  return Object.entries(filter.server).map(([k, v]) => `${k}:${v}`).join(' ');
 }
 
 // Edges are drawn in one SVG layer behind the marks, because a line between

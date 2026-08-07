@@ -872,3 +872,16 @@ tr.is-new > td { animation: arrive 1.4s ease-out 1; }
 }
 .edge { stroke: var(--accent); stroke-width: 1.5; opacity: 0.55; }
 .edge-back { stroke-dasharray: 3 2; }
+
+.filter-input {
+  flex: 1 1 40ch;
+  min-width: 24ch;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.filter-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
