@@ -46,6 +46,11 @@ export function parseFilter(text) {
   const server = {};
   const client = [];
   const words = [];
+  // A term naming a field this view has no reader for is dropped and named,
+  // never quietly turned into something else. `!since:...` was the case that
+  // exposed this: it has no browser-side reader, so it matched every event
+  // while the bar reported that it had run.
+  const ignored = [];
   for (const raw of String(text || '').trim().split(/\s+/).filter(Boolean)) {
     const negate = raw.startsWith('!');
     const token = negate ? raw.slice(1) : raw;
@@ -54,10 +59,11 @@ export function parseFilter(text) {
     const value = i > 0 ? token.slice(i + 1) : token;
     if (field && SERVER_FIELDS.has(field) && !negate) server[field] = value;
     else if (field && (SERVER_FIELDS.has(field) || CLIENT_FIELDS.has(field))) {
-      client.push({ field, value, negate });
+      if (FIELD_OF[field]) client.push({ field, value, negate });
+      else ignored.push(field);
     } else words.push(value.toLowerCase());
   }
-  return { server, client, words };
+  return { server, client, words, ignored };
 }
 
 const FIELD_OF = {
@@ -75,11 +81,19 @@ const FIELD_OF = {
   request: (ev) => (ev._subject || {}).request_id,
 };
 
+// Fields whose values are a closed set where one value is a substring of
+// another. "unverified".includes("verified") is true, so a substring match
+// would draw unverified events into att:verified, and would drop them from
+// !att:verified, which is the query an auditor types to find exactly those.
+const EXACT_FIELDS = new Set(['att']);
+
 export function matches(ev, filter) {
   for (const t of filter.client) {
     const read = FIELD_OF[t.field];
     const got = String((read ? read(ev) : null) ?? '');
-    const hit = got === t.value || got.includes(t.value);
+    const hit = EXACT_FIELDS.has(t.field)
+      ? got === t.value
+      : got === t.value || got.includes(t.value);
     if (hit === t.negate) return false;
   }
   if (filter.words.length) {
@@ -96,8 +110,16 @@ export function derive(events) {
     return lanes.get(id);
   };
 
-  const t0 = events.length ? new Date(events[0].ts).getTime() : 0;
-  const tEnd = events.length ? new Date(events[events.length - 1].ts).getTime() : 0;
+  // Taken from every timestamp that parses, not from the first and last event.
+  // An unparseable ts at either end made t0 NaN, and from there every offset,
+  // every mark position and every edge coordinate was NaN while the page said
+  // nothing. Reading the extremes also drops the assumption that append order
+  // is chronological order, which seq deliberately does not promise.
+  const stamps = events
+    .map((e) => new Date(e.ts).getTime())
+    .filter((n) => !Number.isNaN(n));
+  const t0 = stamps.length ? Math.min(...stamps) : 0;
+  const tEnd = stamps.length ? Math.max(...stamps) : 0;
   const span = Math.max(tEnd - t0, 1);
 
   const marks = [];
@@ -348,16 +370,35 @@ function filterBar(expr, shown, page, total, filter) {
     el('span', { class: 'mono' }, `${num(shown)} of ${num(page)} drawn`),
     el('span', { class: 'faint' }, `${num(total)} match the server-side part of this filter`),
     whereEachTermRan(filter),
-    // A browser-side filter over a page is a filter over a page. Reporting
-    // three results while the log holds more would be a complete-looking
-    // rendering of an incomplete read, which is the failure this console
-    // refuses everywhere else.
-    clientRan && truncated
+    // A page of a larger set is a page, whether or not a browser-side term
+    // ran. Gating this on clientRan meant a plain kind: filter over a log
+    // bigger than one page rendered "1,000 of 1,000 drawn" and said nothing
+    // about the rest, which reads as whole.
+    truncated
       ? el('span', { class: 'warn-text' },
-        `${terms.join(', ')} ran in the browser over the first ${num(page)} matching events, not over the log. `,
-        el('a', { href: `#/trace?f=${encodeURIComponent(narrower(filter))}` },
-          'narrow the server-side read'))
+        `${num(Number(total) - page)} more events match and are not drawn. `,
+        clientRan
+          ? `${terms.join(', ')} ran in the browser over the first ${num(page)} of them, not over the log. `
+          : '',
+        narrowLink(filter))
+      : null,
+    filter.ignored.length
+      ? el('span', { class: 'warn-text' },
+        `${[...new Set(filter.ignored)].join(', ')}: this view has no reader for that field, so the term was dropped rather than matching everything`)
       : null);
+}
+
+// Where to go for a whole answer. With no server-answerable term there is
+// nothing to narrow to, and a link that quietly cleared the filter and drew
+// everything would be the opposite of the honesty this warning exists for.
+function narrowLink(filter) {
+  const expr = narrower(filter);
+  if (!expr) {
+    return el('span', {},
+      'no term in this expression can be pushed down, so the read cannot be narrowed. The fields the API answers are ',
+      mono('kind'), ', ', mono('run'), ', ', mono('actor'), ' and ', mono('since'), '.');
+  }
+  return el('a', { href: `#/trace?f=${encodeURIComponent(expr)}` }, 'narrow the server-side read');
 }
 
 // Where each term ran, and how it matched. The same syntax means two things

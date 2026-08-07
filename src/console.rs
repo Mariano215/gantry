@@ -885,9 +885,10 @@ fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
         .filter_map(|r| Some((r.id.as_str(), r.message.as_deref()?)))
         .collect();
 
-    // The broker appends tool.request and then exactly one policy.decision,
-    // so the pairing is emission order rather than a join key that could go
-    // stale. Same walk as `gantry approve`.
+    // A decision names the call it decided, so the pairing is a join on what
+    // the record carries. Emission order is the fallback for ledgers written
+    // before those fields existed. Same walk as `gantry approve`, and the two
+    // have to agree: this one prints the command that one runs.
     let mut holds: Vec<Hold> = Vec::new();
     let mut pending: Option<(String, String)> = None;
     for ev in &events {
@@ -918,7 +919,13 @@ fn approvals(ledger_dir: &str) -> Result<Value, ApiError> {
                     (Some(id), Some(hash)) => Some((id.to_string(), hash.to_string())),
                     _ => None,
                 };
-                let Some((request_id, call_hash)) = recorded.or_else(|| pending.take()) else {
+                // Taken unconditionally rather than only when the recorded
+                // pair is absent. A ledger holding both shapes, one written
+                // across the upgrade, would otherwise let a later fieldless
+                // decision consume a request from many events back and report
+                // the hold against that call.
+                let fallback = pending.take();
+                let Some((request_id, call_hash)) = recorded.or(fallback) else {
                     continue;
                 };
                 if subject["verdict"].as_str() != Some("hold") {

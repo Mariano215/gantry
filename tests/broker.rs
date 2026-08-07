@@ -1279,3 +1279,67 @@ fn a_decision_names_the_call_it_decided_rather_than_relying_on_adjacency() {
     assert_eq!(dec_subject["verdict"], "hold");
     assert!(dec_subject["rule"].as_str().is_some());
 }
+
+/// The writer's half of the same defect the console reader had. Two calls
+/// interleave on one ledger: request A, request B, then the decision that held
+/// A. Pairing a decision with the request immediately before it reaches A's
+/// decision holding B's identity, so approving A is refused as unknown and
+/// approving B writes a grant bound to a call nothing ever held. The broker
+/// binds a grant by call hash, so that grant would release B on an approval
+/// nobody gave for B.
+#[test]
+fn approve_binds_the_grant_to_the_call_the_decision_named() {
+    use gantry::event::NewEvent;
+    let dir = workdir("approve-correlation");
+    let led = dir.join("ledger-approve-correlation");
+    let mut ledger = Ledger::init(&led).unwrap();
+    let actor = json!({"type": "system", "id": "system:broker", "identity_source": "local", "rung": null});
+    let authority = json!({"policy_version": "sha256:fixture", "diverged": []});
+    let ev = |seq: u64, kind: &str, subject: Value| NewEvent {
+        id: format!("run-9000-{seq}"),
+        run_id: "run-9000".to_string(),
+        parent_id: None,
+        seq,
+        ts: format!("2026-08-07T12:00:{seq:02}.000Z"),
+        kind: kind.to_string(),
+        actor: actor.clone(),
+        authority: authority.clone(),
+        subject,
+        redacted: vec![],
+        attestation: None,
+    };
+    for e in [
+        ev(0, "run.open", json!({"workload": "interleaved", "restored_checkpoint": null})),
+        ev(1, "tool.request", json!({"request_id": "run-9000-req-A", "call_hash": "sha256:aaa", "tool": "Bash", "args": {"command": "git push origin main"}})),
+        ev(2, "tool.request", json!({"request_id": "run-9000-req-B", "call_hash": "sha256:bbb", "tool": "Bash", "args": {"command": "git push origin docs"}})),
+        ev(3, "policy.decision", json!({"verdict": "hold", "rule": "r-publish", "capability": "vcs.publish", "message": "needs an approval", "request_id": "run-9000-req-A", "call_hash": "sha256:aaa"})),
+        ev(4, "run.seal", json!({"outcome": "complete"})),
+    ] {
+        ledger.append(e).unwrap();
+    }
+
+    let out = approve_cmd(&led, "run-9000-req-A", "user:mariano@local");
+    assert!(
+        out.status.success(),
+        "approving the call the decision named was refused: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let grant = events(&led)
+        .into_iter()
+        .filter(|e| e["kind"] == "approval")
+        .map(|e| subject(&led, &e))
+        .next_back()
+        .expect("approve wrote an approval");
+    assert_eq!(
+        grant["call_hash"], "sha256:aaa",
+        "the grant must bind to the call the held decision named, not to whichever request happened to be last"
+    );
+
+    // The other direction: a request the record never held cannot be approved.
+    let out = approve_cmd(&led, "run-9000-req-B", "user:mariano@local");
+    assert!(
+        !out.status.success(),
+        "approving a request no decision held must be refused, and it wrote: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}

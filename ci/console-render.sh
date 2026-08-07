@@ -396,10 +396,17 @@ expect rundetail "so this waterfall is the whole run" "the untruncated case says
 # Trace: one lane per actor that wrote an event. The labels are read off the
 # fixture ledger at check time, so this cannot drift into asserting a
 # constant, and a lane the view invented would not be in this list.
-for actor in ${(f)"$(jq -rs '[.[].actor.id] | unique | .[]' $L/events.jsonl)"}; do
+LANES=(${(f)"$(jq -rs '[.[].actor.id] | unique | .[]' $L/events.jsonl)"})
+# An empty list would run the loop zero times and assert nothing, silently.
+if [ ${#LANES} -lt 2 ]; then
+  echo "the fixture ledger yielded ${#LANES} distinct actors, so the lane assertions below would test nothing. Fix: the envelope's actor.id moved; compare the jq above against src/event.rs"
+  exit 1
+fi
+for actor in $LANES; do
   expect trace "$actor" "a lane is an actor that wrote an event on the fixture ledger"
 done
-expect trace "lanes," "the trace panel names how many lanes it drew and how many events of the total"
+# Both numbers, not the word "lanes,", which passes with zero of everything.
+expect trace "$SIZE of $SIZE events drawn" "the unfiltered trace drew every event the ledger holds and says so"
 expect trace "$HOLD_RULE" "a mark carries its subject summary, so the held decision names its rule on the lane"
 expect trace "edges observed" "the legend states how many edges the record carried"
 expect trace "inferred: 0" "the legend states what the picture refused to draw, not only what it drew"
@@ -411,7 +418,22 @@ refute trace "0 edges observed" "an edge count of zero on a ledger whose tool.re
 # the browser over the page that route returned, and the bar has to report both
 # numbers. A browser-side count printed alone would say the log holds one
 # denial, which is a complete-looking rendering of an incomplete read.
-expect tracefiltered "drawn" "the filter bar states how many of the page it drew"
+# The bar's own pair, not the panel subtitle that ends "events drawn" on every
+# trace route and so passes with filterBar deleted. This filter draws one of
+# the page, so the two numbers differ.
+EVENTS_N=$(wc -l < $L/events.jsonl | tr -d ' ')
+# Every event whose subject carries verdict deny, which is what the browser-side
+# term matches: the policy's denial and the human's refusal both record the
+# field, and the filter is a statement about the record rather than about one
+# event kind.
+DENY_N=$(jq -rs '[.[] | .subject_hash] | .[]' $L/events.jsonl \
+  | sed 's|^sha256:||' | xargs -I{} cat $L/payloads/{}.json \
+  | jq -rs '[.[] | select(.verdict=="deny")] | length')
+if [ "$DENY_N" = "$EVENTS_N" ] || [ "$DENY_N" = "0" ]; then
+  echo "the fixture ledger has $DENY_N denials in $EVENTS_N events, so the filtered count could not be told apart from the unfiltered one. Fix: the fixture stopped producing exactly some denials; check the rm -rf call at the top"
+  exit 1
+fi
+expect tracefiltered "$DENY_N of $EVENTS_N drawn" "the filter bar's own count, which differs from the page it filtered"
 expect tracefiltered "match the server-side part of this filter" "the bar states what the server matched, so a browser-side count is never read as the log"
 expect tracefiltered "$RULE" "the filtered trace drew the denial the fixture recorded"
 # The same syntax matches a whole value at the API and a substring in the
@@ -455,8 +477,15 @@ fi
 expect trace "class=\"warn-text mono\">$UNATT_N<" "the per-lane unattested count, taken off the ledger rather than from the column header"
 refute trace "class=\"warn-text mono\">$UNATT_TOTAL<" "every event on that lane counted as unattested, which is what reading the attestation state under the wrong name produces"
 
-expect tracedetail "$EVENT_ID" "the detail pane opened by its own route, without a click"
-expect tracedetail "from first," "the pane carries the two deltas, so a reader has the time between marks"
+# Both of these must be things ONLY the pane renders. The first pair written
+# here were dead: every mark carries data-event="<id>" and a title reading
+# "... from first, ...", so both passed with detailPane deleted. The class the
+# pane and the split layout carry exist nowhere else, and the detail tree is
+# the only thing on this view that prints the authority block.
+expect tracedetail 'class="trace-aside"' "the detail pane itself, which nothing else on this view renders"
+expect tracedetail "trace-split" "the split layout, which exists only when an event is in focus"
+expect tracedetail "instruction" "a field only the detail tree prints, so the pane rendered its contents and not just its frame"
+refute tracedetail 'class="trace-aside"><div class="trace-aside-head"></div>' "a pane frame with no head, so the tree never mounted"
 
 # Policy: /api/policy, including the firing count joined off the ledger.
 expect policy "$RULE" "the rule table lists the rule that denied the call"
