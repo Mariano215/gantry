@@ -809,3 +809,44 @@ fn a_hold_is_correlated_by_the_recorded_call_and_not_by_position() {
     assert_eq!(holds[0]["request_id"], "run-3000-req-1");
     assert_eq!(holds[0]["state"], "waiting");
 }
+
+/// A run that skips a seq number. The hole is reported and is not a fault:
+/// the record cannot tell a harness killed mid-run from an event a producer
+/// numbered and never appended, so ok stays true and the gap is a finding.
+#[test]
+fn verify_reports_a_seq_gap_and_the_ledger_still_reads_ok() {
+    let dir = workdir("verify-seq-gap").join("ledger");
+    let mut ledger = Ledger::init(&dir).unwrap();
+    for ev in [
+        event(
+            "run-4000",
+            0,
+            "2026-08-07T11:00:00.000Z",
+            "run.open",
+            json!({"workload": "gapped", "restored_checkpoint": null}),
+        ),
+        // seq 1 and 2 are never appended.
+        event(
+            "run-4000",
+            3,
+            "2026-08-07T11:00:03.000Z",
+            "run.seal",
+            json!({"outcome": "complete"}),
+        ),
+    ] {
+        ledger.append(ev).unwrap();
+    }
+
+    let addr = serve(&dir);
+    let body = get(addr, "/api/verify").json();
+    assert_eq!(
+        body["ok"], true,
+        "a hole in seq is a finding and never a fault"
+    );
+    let gaps = body["seq_gaps"].as_array().expect("seq_gaps is an array");
+    assert_eq!(gaps.len(), 1);
+    assert_eq!(gaps[0]["run_id"], "run-4000");
+    assert_eq!(gaps[0]["after"], 0);
+    assert_eq!(gaps[0]["before"], 3);
+    assert_eq!(gaps[0]["missing"], 2);
+}

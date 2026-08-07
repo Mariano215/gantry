@@ -1123,8 +1123,26 @@ fn verify(ledger_dir: &str) -> Result<Value, ApiError> {
     let path = std::fs::canonicalize(dir)
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ledger_dir.to_string());
+    // The gaps the report already found. A hole in seq is a finding, not a
+    // fault: a removed entry faults on the chain or on a signed head, so a
+    // hole is an event that was never appended, and the log cannot tell a
+    // harness killed mid-run from a producer that numbered an event it failed
+    // to write. Until now nothing on the console could see one at all.
+    let seq_gaps: Vec<Value> = report
+        .seq_gaps
+        .iter()
+        .map(|g| {
+            json!({
+                "run_id": g.run_id,
+                "after": g.after,
+                "before": g.before,
+                "missing": g.missing,
+            })
+        })
+        .collect();
     Ok(json!({
         "ok": report.ok(),
+        "seq_gaps": seq_gaps,
         "entries": report.entries,
         "attestations_verified": report.attestations_verified,
         "attestations_unverified": report.attestations_unverified,
