@@ -10,7 +10,7 @@
 import { api, state } from '/api.js';
 import {
   el, svgEl, clear, mono, panel, loading, actorId, attMark, attRowClass,
-  subjectSummary, num, tsShort,
+  subjectSummary, num, tsShort, table, td,
 } from '/ui.js';
 // views.js imports this module, so this is a cycle. It is safe because the
 // binding is read when a pane is built and never while either module is
@@ -216,6 +216,55 @@ export async function trace(host, route) {
       spanList(model),
       el('div', { class: 'lane-stack' }, edgeLayer(model, laneIndex), laneBoard(model))),
       detailPane(model, focusId)),
+    panel('Lanes', {
+      sub: 'sorted by denials, because that is the lane worth opening',
+      flush: true,
+    }, laneStats(model)),
+  );
+}
+
+function laneStats(model) {
+  const rows = model.lanes.map((lane) => {
+    const marks = lane.marks;
+    const subj = (m) => m.ev._subject || {};
+    return {
+      lane,
+      marks,
+      denials: marks.filter((m) => subj(m).verdict === 'deny').length,
+      holds: marks.filter((m) => subj(m).verdict === 'hold').length,
+      heldMs: model.spans
+        .filter((s) => s.from.lane === lane.id)
+        .reduce((a, s) => a + s.ms, 0),
+      unattested: marks.filter((m) => m.ev._attestation_state !== 'verified').length,
+    };
+  }).sort((a, b) => b.denials - a.denials || b.marks.length - a.marks.length);
+
+  // A peer lane holds no marks of its own, because nothing on the record was
+  // written by it. Its row says so rather than printing a zero, which would
+  // describe a lane that ran and did nothing.
+  const none = () => el('span', { class: 'faint' }, 'none of its own');
+  const zero = () => el('span', { class: 'faint mono' }, '0');
+
+  return table(
+    [
+      { label: 'lane', width: '26ch' }, { label: 'events', num: true, width: '9ch' },
+      { label: 'denials', num: true, width: '9ch' }, { label: 'holds', num: true, width: '8ch' },
+      { label: 'held', num: true, width: '9ch' }, { label: 'unattested', num: true, width: '12ch' },
+      { label: 'first', num: true, width: '10ch' }, { label: 'last', num: true, width: '10ch' },
+    ],
+    rows.map((r) => el('tr', {},
+      td(mono(r.lane.id), 'nowrap'),
+      td(r.marks.length ? mono(num(r.marks.length)) : none(), 'num'),
+      td(r.denials ? el('span', { class: 'tag tag-deny' }, num(r.denials)) : zero(), 'num'),
+      td(r.holds ? el('span', { class: 'tag tag-warn' }, num(r.holds)) : zero(), 'num'),
+      td(r.heldMs ? mono(`${(r.heldMs / 1000).toFixed(1)}s`) : zero(), 'num'),
+      td(r.unattested ? el('span', { class: 'warn-text mono' }, num(r.unattested)) : zero(), 'num'),
+      td(r.marks.length ? mono(`+${(r.marks[0].offsetMs / 1000).toFixed(2)}s`) : none(), 'num'),
+      td(r.marks.length
+        ? mono(`+${(r.marks[r.marks.length - 1].offsetMs / 1000).toFixed(2)}s`)
+        : none(), 'num'),
+    )),
+    { empty: 'no events on this filter, so no lane has statistics' },
   );
 }
 

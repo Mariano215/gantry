@@ -431,6 +431,26 @@ expect trace "between seq $GAP_AFTER and $GAP_BEFORE" "the gap names the seq eit
 expect trace "not an alteration" "a gap is a finding and the page says so"
 refute trace "tampered" "a gap rendered as tampering, which is a distinction the record cannot make"
 
+# Per-lane statistics. The unattested column must not render as a pass, and a
+# peer lane says it has no events of its own rather than printing a zero that
+# would describe a lane that ran and did nothing.
+expect trace "sorted by denials" "the lane statistics strip mounted"
+expect trace "none of its own" "a peer lane distinguishes having no events from having zero"
+# The unattested column is a header, so asserting the word proves nothing: it
+# renders whether or not the count behind it was computed. The assertion is the
+# number, taken off the ledger, for the lane that has the most events carrying
+# no attestation. Reading the attestation state under a name the API does not
+# return makes every event on that lane unattested, which is a different number
+# and is what the refute below catches.
+UNATT_N=$(jq -rs '[group_by(.actor.id)[] | {n: ([.[] | select(.attestation==null)] | length), total: length}] | map(select(.n > 0 and .n < .total)) | sort_by(-.n) | .[0].n' $L/events.jsonl)
+UNATT_TOTAL=$(jq -rs '[group_by(.actor.id)[] | {n: ([.[] | select(.attestation==null)] | length), total: length}] | map(select(.n > 0 and .n < .total)) | sort_by(-.n) | .[0].total' $L/events.jsonl)
+if [ -z "$UNATT_N" ] || [ "$UNATT_N" = "null" ]; then
+  echo "no lane on the fixture ledger has some but not all of its events unattested, so the assertion below could not tell a computed count from a lane's whole event count. Fix: the fixture stopped producing a mix of signed and unsigned events; check what gantry approve and gantry ledger append attach"
+  exit 1
+fi
+expect trace "class=\"warn-text mono\">$UNATT_N<" "the per-lane unattested count, taken off the ledger rather than from the column header"
+refute trace "class=\"warn-text mono\">$UNATT_TOTAL<" "every event on that lane counted as unattested, which is what reading the attestation state under the wrong name produces"
+
 expect tracedetail "$EVENT_ID" "the detail pane opened by its own route, without a click"
 expect tracedetail "from first," "the pane carries the two deltas, so a reader has the time between marks"
 
