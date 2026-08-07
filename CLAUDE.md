@@ -463,6 +463,36 @@ indistinguishable from a use and the count would be wrong by one.
   (`the_observed_mode_reaches_the_event_from_the_pinning_and_not_the_environment`,
   which drives a diverging mode, a matching mode and no observation at all
   through a real run and reads the authority block off the event)
+- **An arrow asserts a handoff, and an event records one end of it.** The trace
+  view draws an edge only where a producer recorded a peer, in the one place a
+  peer is read (`PEER_FIELD` in `assets/trace.js`), and holds no table mapping
+  an event kind to a source and a destination lane. Every other event is a
+  marker on a single lane, and the legend prints `inferred: 0` beside the
+  observed count, because a diagram people trust has to say what it refused to
+  draw. The picture is sparse, and the sparseness names the handoffs this
+  system does not observe; the fix for a missing arrow is a producer recording
+  a peer, never a renderer inferring one. Two things the same view must not do:
+  paint one mark over another, since marks sharing a position are drawn as one
+  carrying its count and the legend states marks against events on every
+  render, and report a browser-side filter count as a statement about the log.
+  Since slice 21 a decision names its own call: `policy.decision` carries
+  `request_id` and `call_hash`, so a hold and the approval that answered it
+  join on the record rather than on position in the log. Both readers were
+  wrong before: the console reported the hold against the wrong call, and
+  `gantry approve` refused the call the record held while writing a grant bound
+  to a call nothing held, which the broker would then have released. A hole in
+  a run's seq also reaches an operator surface for the first time, drawn apart
+  from a fault because the record cannot tell a killed harness from an event a
+  producer numbered and never wrote. Enforced by `tests/invariants.rs`
+  (`the_trace_view_derives_no_edge_from_an_event_kind_alone`), `tests/broker.rs`
+  (`a_decision_names_the_call_it_decided_rather_than_relying_on_adjacency`,
+  `approve_binds_the_grant_to_the_call_the_decision_named`),
+  `tests/console.rs`
+  (`a_hold_is_correlated_by_the_recorded_call_and_not_by_position`,
+  `verify_reports_a_seq_gap_and_the_ledger_still_reads_ok`) and
+  `ci/console-render.sh`, whose every trace assertion was proved able to fail
+  by breaking the thing it names; four of them did not, and `docs/proof/21.md`
+  records what they were and what replaced them
 
 ## Code standards
 

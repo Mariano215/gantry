@@ -1293,7 +1293,8 @@ fn approve_binds_the_grant_to_the_call_the_decision_named() {
     let dir = workdir("approve-correlation");
     let led = dir.join("ledger-approve-correlation");
     let mut ledger = Ledger::init(&led).unwrap();
-    let actor = json!({"type": "system", "id": "system:broker", "identity_source": "local", "rung": null});
+    let actor =
+        json!({"type": "system", "id": "system:broker", "identity_source": "local", "rung": null});
     let authority = json!({"policy_version": "sha256:fixture", "diverged": []});
     let ev = |seq: u64, kind: &str, subject: Value| NewEvent {
         id: format!("run-9000-{seq}"),
@@ -1309,10 +1310,26 @@ fn approve_binds_the_grant_to_the_call_the_decision_named() {
         attestation: None,
     };
     for e in [
-        ev(0, "run.open", json!({"workload": "interleaved", "restored_checkpoint": null})),
-        ev(1, "tool.request", json!({"request_id": "run-9000-req-A", "call_hash": "sha256:aaa", "tool": "Bash", "args": {"command": "git push origin main"}})),
-        ev(2, "tool.request", json!({"request_id": "run-9000-req-B", "call_hash": "sha256:bbb", "tool": "Bash", "args": {"command": "git push origin docs"}})),
-        ev(3, "policy.decision", json!({"verdict": "hold", "rule": "r-publish", "capability": "vcs.publish", "message": "needs an approval", "request_id": "run-9000-req-A", "call_hash": "sha256:aaa"})),
+        ev(
+            0,
+            "run.open",
+            json!({"workload": "interleaved", "restored_checkpoint": null}),
+        ),
+        ev(
+            1,
+            "tool.request",
+            json!({"request_id": "run-9000-req-A", "call_hash": "sha256:aaa", "tool": "Bash", "args": {"command": "git push origin main"}}),
+        ),
+        ev(
+            2,
+            "tool.request",
+            json!({"request_id": "run-9000-req-B", "call_hash": "sha256:bbb", "tool": "Bash", "args": {"command": "git push origin docs"}}),
+        ),
+        ev(
+            3,
+            "policy.decision",
+            json!({"verdict": "hold", "rule": "r-publish", "capability": "vcs.publish", "message": "needs an approval", "request_id": "run-9000-req-A", "call_hash": "sha256:aaa"}),
+        ),
         ev(4, "run.seal", json!({"outcome": "complete"})),
     ] {
         ledger.append(e).unwrap();
