@@ -4,7 +4,7 @@ Companion to the twelve-primitive rubric. Self-contained. Its home is
 harness-kit, https://github.com/Mariano215/harness-kit, at
 `docs/harness-engineering.md`; this is an offline copy.
 
-Last reconciled against harness-kit contracts 0.1.0 · spec 0.1.0-draft.
+Last reconciled against harness-kit contracts 0.2.0 · spec 0.2.0-draft.
 
 **Source:** Böckeler, Birgitta. "Harness Engineering for Coding Agent Users."
 martinfowler.com, 02 April 2026.

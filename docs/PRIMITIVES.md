@@ -7,7 +7,7 @@ https://github.com/Mariano215/agent-harness-maturity/blob/main/SPEC.md. What to
 build to reach a level, rather than what a level means, lives in harness-kit,
 https://github.com/Mariano215/harness-kit.
 
-Last reconciled against harness-kit contracts 0.1.0 · spec 0.1.0-draft.
+Last reconciled against harness-kit contracts 0.2.0 · spec 0.2.0-draft.
 
 ## The core claim
 
