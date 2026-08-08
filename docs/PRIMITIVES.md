@@ -1,7 +1,13 @@
 # The Twelve-Primitive Agent Harness Maturity Rubric
 
-Canonical reference. Self-contained: everything needed to apply the framework
-is in this document.
+A condensation, deliberately lossy, written for this scanner's ceiling argument
+and self-contained so an offline build needs nothing else. The canonical text is
+the Agent Harness Maturity Specification,
+https://github.com/Mariano215/agent-harness-maturity/blob/main/SPEC.md. What to
+build to reach a level, rather than what a level means, lives in harness-kit,
+https://github.com/Mariano215/harness-kit.
+
+Last reconciled against harness-kit contracts 0.1.0 · spec 0.1.0-draft.
 
 ## The core claim
 
